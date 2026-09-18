@@ -1,0 +1,147 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* `dark:` only applies under a `.dark` ancestor, never from the OS setting.
+   The palette is light-only; without this line shadcn's dark: classes would
+   half-apply on machines set to dark mode. */
+@custom-variant dark (&:is(.dark *));
+
+/* ─────────────────────────────────────────────────────────────
+   NIROG PHARMA — BRAND PALETTE
+   The single source of truth for every colour in the app.
+   Change a value here and every page, component and shadcn
+   primitive follows. No hex codes anywhere else in src/.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --bg: #f4fbf7;          /* page background        — near-white mint */
+  --mint-pale: #ddf5e8;   /* tints, borders          — pale mint */
+  --mint: #b6ebcf;        /* main gradient           — light mint */
+  --green-soft: #7fd9a8;  /* gradient bottom, cards  — soft green */
+  --green-fresh: #2ecc8f; /* glow, dots, highlights  — fresh green */
+  --green-deep: #0e7c5a;  /* links, small accents    — deep green */
+  --forest: #0b3d2e;      /* text on green tints     — forest */
+  --black: #0b0d0c;       /* headings, buttons */
+  --text: #1f2a25;        /* body text               — dark ink */
+  --text-muted: #4b5651;  /* secondary text          — slate */
+  --white: #ffffff;       /* cards and inputs */
+
+  /* shadcn primitives, mapped onto the brand palette */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--white);
+  --card-foreground: var(--text);
+  --popover: var(--white);
+  --popover-foreground: var(--text);
+  --primary: var(--black);
+  --primary-foreground: var(--white);
+  --secondary: var(--mint-pale);
+  --secondary-foreground: var(--forest);
+  --muted: var(--mint-pale);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--mint-pale);
+  --accent-foreground: var(--forest);
+  --destructive: #dc2626;
+  --border: var(--mint-pale);
+  --input: var(--mint-pale);
+  --ring: var(--green-fresh);
+  --radius: 0.625rem;
+}
+
+/* Utility classes generated from the palette:
+   bg-bg, bg-mint-pale, bg-mint, bg-green-soft, bg-green-fresh, bg-green-deep,
+   bg-forest, bg-black, text-ink, text-ink-muted, border-mint-pale, … */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-mint-pale: var(--mint-pale);
+  --color-mint: var(--mint);
+  --color-green-soft: var(--green-soft);
+  --color-green-fresh: var(--green-fresh);
+  --color-green-deep: var(--green-deep);
+  --color-forest: var(--forest);
+  --color-black: var(--black);
+  --color-ink: var(--text);
+  --color-ink-muted: var(--text-muted);
+  --color-white: var(--white);
+
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ── Template utilities ───────────────────────────────────── */
+
+/* Hero glow: white → mint → soft green → back to page background. */
+@utility bg-hero {
+  background: linear-gradient(
+    180deg,
+    var(--white) 0%,
+    var(--bg) 6%,
+    var(--mint-pale) 30%,
+    var(--mint) 52%,
+    var(--green-soft) 80%,
+    var(--bg) 100%
+  );
+}
+
+/* Soft fade used behind the closing CTA band and footer. */
+@utility bg-fade-up {
+  background: linear-gradient(180deg, var(--bg) 0%, var(--mint-pale) 55%, var(--mint) 100%);
+}
+
+/* Green glow under floating cards and mock windows. */
+@utility shadow-glow {
+  box-shadow: 0 24px 60px -24px color-mix(in oklab, var(--green-fresh) 45%, transparent);
+}
+
+/* Lifted shadow under black buttons, as in the template. */
+@utility shadow-lift {
+  box-shadow: 0 10px 22px -8px color-mix(in oklab, var(--black) 55%, transparent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem; /* anchor links land below the sticky header */
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply text-black tracking-tight;
+  }
+}
