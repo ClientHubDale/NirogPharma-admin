@@ -15,8 +15,13 @@ export const site = {
     email: '[Email address]',
     phone: '[Phone number]',
     address: '[Office address]',
+    // Office WhatsApp number with country code, digits only (e.g. 919876543210).
+    // Powers the "Help" button and the floating WhatsApp button in the dashboard.
+    whatsapp: '',
   },
 }
 
 export const hasPlayStoreLink = Boolean(site.playStoreUrl)
 export const downloadHref = site.playStoreUrl || '#download'
+
+export const whatsappHref = site.contact.whatsapp ? `https://wa.me/${site.contact.whatsapp}` : undefined

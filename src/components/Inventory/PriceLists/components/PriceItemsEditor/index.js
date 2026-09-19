@@ -1,0 +1,1 @@
+export { PriceItemsEditor } from './PriceItemsEditor'

@@ -26,6 +26,17 @@
   --text-muted: #4b5651;  /* secondary text          — slate */
   --white: #ffffff;       /* cards and inputs */
 
+  /* Status colours — for state only (overdue, pending, late), never decoration.
+     Always paired with a text label or icon. Validated ≥3:1 on white. */
+  --success: var(--green-deep);
+  --success-soft: var(--mint-pale);
+  --warning: #b8780f;      /* pending, ageing, due soon */
+  --warning-soft: #fbf0dc;
+  --warning-ink: #7d500a;  /* text on warning-soft */
+  --danger: #c2413a;       /* overdue, critical */
+  --danger-soft: #fbe6e3;
+  --danger-ink: #8f2a24;   /* text on danger-soft */
+
   /* shadcn primitives, mapped onto the brand palette */
   --background: var(--bg);
   --foreground: var(--text);
@@ -41,7 +52,7 @@
   --muted-foreground: var(--text-muted);
   --accent: var(--mint-pale);
   --accent-foreground: var(--forest);
-  --destructive: #dc2626;
+  --destructive: var(--danger);
   --border: var(--mint-pale);
   --input: var(--mint-pale);
   --ring: var(--green-fresh);
@@ -63,6 +74,14 @@
   --color-ink: var(--text);
   --color-ink-muted: var(--text-muted);
   --color-white: var(--white);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-ink: var(--warning-ink);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: var(--danger-ink);
 
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sans);
