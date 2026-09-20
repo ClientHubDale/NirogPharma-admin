@@ -13,6 +13,7 @@
  * looks the same while clicking around.
  */
 import { DEFAULT_MAP_CENTER } from '@/constants/maps'
+import { haversineKm } from '@/lib/geo'
 
 const PARTY_NAMES = [
   'Shree Medicals', 'City Chemist', 'Om Medical Store', 'Jain Pharmacy', 'Shivjivan Medical Store',
@@ -53,16 +54,6 @@ function pickWeighted(rand, items) {
   const total = items.reduce((sum, item) => sum + item.weight, 0)
   let roll = rand() * total
   return items.find((item) => (roll -= item.weight) < 0) ?? items[0]
-}
-
-/** Great-circle distance in km. */
-export function haversineKm(a, b) {
-  const R = 6371
-  const toRad = (deg) => (deg * Math.PI) / 180
-  const dLat = toRad(b.lat - a.lat)
-  const dLng = toRad(b.lng - a.lng)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(h))
 }
 
 /* ── dates ───────────────────────────────────────────────────── */

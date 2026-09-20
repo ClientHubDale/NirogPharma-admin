@@ -14,7 +14,7 @@ export function TextAreaField({ id, label, error, className, rows = 3, ...props 
         aria-invalid={Boolean(error)}
         aria-describedby={errorId}
         className={cn(
-          'w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted/70 transition-[border-color,box-shadow]',
+          'w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted/70 transition-[border-color,box-shadow] disabled:resize-none disabled:bg-bg disabled:text-ink-muted',
           error
             ? 'border-destructive focus:ring-3 focus:ring-destructive/15'
             : 'border-mint focus:border-green-fresh focus:ring-3 focus:ring-ring/25',

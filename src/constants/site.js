@@ -21,6 +21,13 @@ export const site = {
   },
 }
 
+/** The billing company — its GST state decides CGST+SGST (same state) vs IGST. */
+export const company = {
+  legalName: 'Nirog Pharma Pvt. Ltd.',
+  stateCode: '09', // Uttar Pradesh (Meerut)
+  gstin: '[Company GSTIN]',
+}
+
 export const hasPlayStoreLink = Boolean(site.playStoreUrl)
 export const downloadHref = site.playStoreUrl || '#download'
 

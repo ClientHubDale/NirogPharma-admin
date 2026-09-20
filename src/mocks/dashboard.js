@@ -84,20 +84,20 @@ export const overdueBills = [
 export const managerSales = [
   { id: 'm1', name: 'S. Deshmukh', area: 'Malwa', amount: 462000 },
   { id: 'm2', name: 'P. Naidu', area: 'Nimar', amount: 310000 },
-  { id: 'm3', name: 'A. Rathi', area: 'Ujjain', amount: 148000 },
+  { id: 'm3', name: 'A. Rathi', area: 'Saharanpur', amount: 148000 },
 ]
 
 /** oldestDays = age of the oldest unpaid bill; drives the status colour. */
 export const distributorOutstanding = [
   { id: 'd1', name: 'Shree Ganesh Distributors', amount: 843000, oldestDays: 52 },
   { id: 'd2', name: 'Nirmal Agencies', amount: 609000, oldestDays: 38 },
-  { id: 'd3', name: 'Malwa Medico Supply', amount: 391000, oldestDays: 33 },
+  { id: 'd3', name: 'Ganga Medico Supply', amount: 391000, oldestDays: 33 },
 ]
 
 export const newDistributors = [
-  { id: 'p1', name: 'Malwa Medico Supply', address: 'Sector D, Industrial Area, Indore', addedBy: 'S. Deshmukh', daysAgo: 2 },
-  { id: 'p2', name: 'MP Pharma Traders', address: 'Sector D, Industrial Area, Indore', addedBy: 'P. Naidu', daysAgo: 4 },
-  { id: 'p3', name: 'Nirmal Agencies', address: 'Palasia Square, Indore', addedBy: 'S. Deshmukh', daysAgo: 6 },
+  { id: 'p1', name: 'Ganga Medico Supply', address: 'Sector D, Industrial Area, Meerut', addedBy: 'S. Deshmukh', daysAgo: 2 },
+  { id: 'p2', name: 'Doab Pharma Traders', address: 'Sector D, Industrial Area, Meerut', addedBy: 'P. Naidu', daysAgo: 4 },
+  { id: 'p3', name: 'Nirmal Agencies', address: 'Begum Bridge Road, Meerut', addedBy: 'S. Deshmukh', daysAgo: 6 },
 ]
 
 export const creditNotes = [
@@ -111,8 +111,8 @@ export const VISIT_TARGET_PER_MONTH = 15
 export const distributorVisits = [
   { id: 'd1', name: 'Shree Ganesh Distributors', visits: 14 },
   { id: 'd2', name: 'Nirmal Agencies', visits: 9 },
-  { id: 'd3', name: 'Malwa Medico Supply', visits: 6 },
-  { id: 'd4', name: 'MP Pharma Traders', visits: 2 },
+  { id: 'd3', name: 'Ganga Medico Supply', visits: 6 },
+  { id: 'd4', name: 'Doab Pharma Traders', visits: 2 },
 ]
 
 /** type → icon + tone in the UI. */

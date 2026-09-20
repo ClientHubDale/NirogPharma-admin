@@ -6,6 +6,8 @@ export const TONE_CLASSES = {
   success: { bar: 'bg-success', soft: 'bg-success-soft', ink: 'text-forest', text: 'text-success' },
   warning: { bar: 'bg-warning', soft: 'bg-warning-soft', ink: 'text-warning-ink', text: 'text-warning' },
   danger: { bar: 'bg-danger', soft: 'bg-danger-soft', ink: 'text-danger-ink', text: 'text-danger' },
+  // In progress (confirmed, dispatched…) — brand green, distinct from done.
+  info: { bar: 'bg-green-soft', soft: 'bg-mint-pale', ink: 'text-green-deep', text: 'text-green-deep' },
   neutral: { bar: 'bg-ink-muted/40', soft: 'bg-bg', ink: 'text-ink-muted', text: 'text-ink-muted' },
 }
 

@@ -1,27 +1,10 @@
 import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatClock } from '@/lib/format'
+import { makeProjector } from '@/lib/geo'
 import { TrackMarker } from './TrackMarker'
 import { UserInfoCard } from './UserInfoCard'
 import { UserPin } from './UserPin'
-
-const PAD_X = 0.08 // keep pins off the edges
-const PAD_TOP = 0.2 // clear of the notice banner
-const PAD_BOTTOM = 0.1
-
-/** Maps lat/lng into 0–100% box coordinates spanning the given points. */
-function makeProjector(points) {
-  if (points.length <= 1) return () => ({ x: 50, y: 50 })
-  const lats = points.map((p) => p.lat)
-  const lngs = points.map((p) => p.lng)
-  const [minLat, maxLat] = [Math.min(...lats), Math.max(...lats)]
-  const [minLng, maxLng] = [Math.min(...lngs), Math.max(...lngs)]
-  const spanLat = maxLat - minLat || 1
-  const spanLng = maxLng - minLng || 1
-  const x = (v) => (PAD_X + v * (1 - 2 * PAD_X)) * 100
-  const y = (v) => (PAD_TOP + v * (1 - PAD_TOP - PAD_BOTTOM)) * 100
-  return (p) => ({ x: x((p.lng - minLng) / spanLng), y: y(1 - (p.lat - minLat) / spanLat) })
-}
 
 function Notice() {
   return (

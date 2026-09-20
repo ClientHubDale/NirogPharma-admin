@@ -11,7 +11,6 @@ import {
   Route,
   Settings,
   ShoppingCart,
-  Truck,
   UserCog,
   Users,
   Wallet,
@@ -40,8 +39,6 @@ export const adminNav = [
       { label: 'Items', path: `${ADMIN}/inventory/items` },
       { label: 'Schemes', path: `${ADMIN}/inventory/schemes` },
       { label: 'Price Lists', path: `${ADMIN}/inventory/price-lists` },
-      { label: 'Warehouses', path: `${ADMIN}/inventory/warehouses` },
-      { label: 'Transfer Orders', path: `${ADMIN}/inventory/transfer-orders` },
     ],
   },
   {
@@ -75,14 +72,12 @@ export const adminNav = [
       { label: 'Purchase Returns', path: `${ADMIN}/purchase/returns` },
     ],
   },
-  { label: 'Van Sale', icon: Truck, path: `${ADMIN}/van-sale` },
   {
     label: 'Finance',
     icon: Wallet,
     children: [
-      { label: 'Payments', path: `${ADMIN}/finance/payments` },
-      { label: 'Payment Confirmation', path: `${ADMIN}/finance/confirmation` },
-      { label: 'Outstanding', path: `${ADMIN}/finance/outstanding` },
+      { label: 'Payment In', path: `${ADMIN}/finance/payment-in` },
+      { label: 'Payment Out', path: `${ADMIN}/finance/payment-out` },
     ],
   },
   {
@@ -96,14 +91,9 @@ export const adminNav = [
   },
   { label: 'Attendance', icon: CalendarClock, path: `${ADMIN}/attendance` },
   {
-    label: 'Users',
+    label: 'User',
     icon: UserCog,
-    children: [
-      { label: 'Employees', path: `${ADMIN}/users/employees` },
-      { label: 'Teams', path: `${ADMIN}/users/teams` },
-      { label: 'Salary & TA/DA', path: `${ADMIN}/users/salary` },
-      { label: 'Targets', path: `${ADMIN}/users/targets` },
-    ],
+    children: [{ label: 'Users', path: `${ADMIN}/users` }],
   },
   { label: 'Reports', icon: ClipboardList, path: `${ADMIN}/reports` },
   { label: 'Settings', icon: Settings, path: `${ADMIN}/settings`, footer: true },

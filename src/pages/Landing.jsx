@@ -24,7 +24,7 @@ export default function Landing() {
         subtitle="Install the app, sign in with the details from the office, and start today with a check-in."
       >
         <Button asChild size="xl">
-          <a href={downloadHref}>DownloadApp</a>
+          <a href={downloadHref}>Download App</a>
         </Button>
       </CtaBand>
     </>

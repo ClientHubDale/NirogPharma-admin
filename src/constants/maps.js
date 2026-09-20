@@ -3,8 +3,8 @@ export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '
 export const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID'
 export const hasGoogleMapsKey = Boolean(GOOGLE_MAPS_API_KEY)
 
-/** Initial view: the Malwa / Nimar region around Indore. */
-export const DEFAULT_MAP_CENTER = { lat: 22.72, lng: 75.86 }
+/** Initial view: western Uttar Pradesh around Meerut. */
+export const DEFAULT_MAP_CENTER = { lat: 28.98, lng: 77.71 }
 export const DEFAULT_MAP_ZOOM = 8
 
 /** A location ping newer than this counts as "live". */

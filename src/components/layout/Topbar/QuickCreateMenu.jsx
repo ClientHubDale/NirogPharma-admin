@@ -1,4 +1,4 @@
-import { ClipboardList, FilePlus2, PackagePlus, Plus, UserPlus, Wallet } from 'lucide-react'
+import { ClipboardList, Factory, FilePlus2, PackagePlus, Plus, UserPlus, Wallet } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,10 +11,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 const actions = [
-  { label: 'Add party', icon: UserPlus, path: '/admin/parties/customers' },
+  { label: 'Add customer', icon: UserPlus, path: '/admin/parties/customers', state: { create: true } },
+  { label: 'Add supplier', icon: Factory, path: '/admin/parties/suppliers', state: { create: true } },
   { label: 'Add item', icon: PackagePlus, path: '/admin/inventory/items' },
-  { label: 'New sales order', icon: ClipboardList, path: '/admin/sales/orders' },
-  { label: 'New invoice', icon: FilePlus2, path: '/admin/sales/invoices' },
+  { label: 'New sales order', icon: ClipboardList, path: '/admin/sales/orders/new' },
+  { label: 'New invoice', icon: FilePlus2, path: '/admin/sales/invoices/new' },
   { label: 'Record payment', icon: Wallet, path: '/admin/finance/payments' },
   { label: 'Add user', icon: UserPlus, path: '/admin/users/employees' },
 ]
@@ -32,8 +33,8 @@ export function QuickCreateMenu() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Create new</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {actions.map(({ label, icon: Icon, path }) => (
-          <DropdownMenuItem key={label} onSelect={() => navigate(path)} className="gap-2.5 py-2">
+        {actions.map(({ label, icon: Icon, path, state }) => (
+          <DropdownMenuItem key={label} onSelect={() => navigate(path, { state })} className="gap-2.5 py-2">
             <Icon className="size-4 text-green-deep" />
             {label}
           </DropdownMenuItem>

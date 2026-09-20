@@ -22,7 +22,7 @@ export function RowActions({ label, actions }) {
         >
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-56">
           {actions.map(({ label: text, icon: Icon, onSelect, destructive, separatorBefore }) => (
             <Fragment key={text}>
               {separatorBefore && <DropdownMenuSeparator />}
