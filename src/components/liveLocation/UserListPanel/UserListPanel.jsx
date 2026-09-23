@@ -49,7 +49,10 @@ export function UserListPanel({ users, query, onQueryChange, selectedId, onSelec
                     <span className={cn('absolute right-0 bottom-0 size-3 rounded-full ring-2 ring-white', style.dot)} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-black uppercase">{user.name}</span>
+                    <span className="block truncate text-sm font-bold text-black uppercase">
+                      {user.name}
+                      {user.manager && <span className="font-semibold text-ink-muted normal-case"> ({user.manager})</span>}
+                    </span>
                     <span className="block truncate text-xs text-ink-muted">
                       {style.label}
                       {user.area ? ` · ${user.area}` : ''}

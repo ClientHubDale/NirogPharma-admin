@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { StatusPill } from '@/components/data/StatusPill'
+import { UserAvatar } from '@/components/common/UserAvatar'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { Switch } from '@/components/form/Switch'
 import { Button } from '@/components/ui/button'
@@ -94,9 +95,12 @@ export default function Users() {
         helper.accessor('name', {
           header: 'User Name',
           cell: ({ row, getValue }) => (
-            <Link to={`/admin/attendance/${row.original.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-green-deep uppercase hover:underline">
-              {getValue()}
-            </Link>
+            <div className="flex items-center gap-2.5">
+              <UserAvatar name={getValue()} photo={row.original.photo?.[0]?.url} className="size-8 bg-mint-pale text-[0.7rem] text-forest" />
+              <Link to={`/admin/attendance/${row.original.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-green-deep uppercase hover:underline">
+                {getValue()}
+              </Link>
+            </div>
           ),
         }),
         helper.accessor('mobile', { header: 'Mobile', cell: (i) => <span className="font-mono text-sm whitespace-nowrap">{i.getValue()}</span> }),

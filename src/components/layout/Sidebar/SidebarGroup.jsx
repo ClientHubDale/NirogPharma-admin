@@ -36,6 +36,9 @@ export function SidebarGroup({ item, onNavigate }) {
                 to={child.path}
                 onClick={onNavigate}
                 tabIndex={open ? 0 : -1}
+                // A tab whose path is the start of a sibling's (Users vs Users › Payouts)
+                // must match exactly, or both would light up.
+                end={child.end ?? item.children.some((other) => other.path.startsWith(`${child.path}/`))}
                 className={({ isActive }) =>
                   cn(
                     'block rounded-md px-3 py-2 text-sm transition-colors',

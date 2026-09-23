@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { useSelector } from 'react-redux'
 import { LiveMap } from '@/components/liveLocation/LiveMap'
 import { StatusFilterBar } from '@/components/liveLocation/StatusFilterBar'
 import { UserListPanel } from '@/components/liveLocation/UserListPanel'
@@ -8,6 +9,11 @@ import { Button } from '@/components/ui/button'
 import { LIVE_FILTERS, liveStatusOf, matchesFilter } from '@/lib/liveStatus'
 import { fieldStaff } from '@/mocks/liveLocation'
 import { getUserTrack, todayISO } from '@/mocks/userTracks'
+import { DOC_TYPES, titleCase } from '@/components/Transactions/docTypes'
+import { docTotals, lineTotals } from '@/components/Transactions/transactionModel'
+import { selectParties } from '@/store/partiesSlice'
+import { selectDocs } from '@/store/transactionsSlice'
+
 
 const STATUS_ORDER = { live: 0, active: 1, offline: 2 }
 
@@ -44,6 +50,33 @@ export default function LiveLocation() {
 
   const trackUser = fieldStaff.find((u) => u.id === trackUserId) ?? null
   const trackData = trackUser ? getUserTrack(trackUser, trackDate) : null
+
+  // Secondary sales = what this user sold to retailers that day.
+  const orders = useSelector(selectDocs('SALES_ORDER'))
+  const invoices = useSelector(selectDocs('SALES_INVOICE'))
+  const customers = useSelector(selectParties('CUSTOMER'))
+  const userSales = useMemo(() => {
+    if (!trackUser) return []
+    const partyName = Object.fromEntries(customers.map((c) => [c.id, c.name]))
+    return [...orders, ...invoices]
+      .filter((doc) => doc.createdBy === trackUser.id && doc.date === trackDate)
+      .map((doc) => {
+        const config = DOC_TYPES[doc.type]
+        const status = config.statuses.find((st) => st.value === doc.status)
+        return {
+          id: doc.id,
+          kind: titleCase(config.noun),
+          number: doc.number,
+          partyName: partyName[doc.partyId] ?? 'Deleted party',
+          status: status?.label ?? doc.status,
+          tone: status?.tone ?? 'neutral',
+          total: docTotals(doc, customers.find((c) => c.id === doc.partyId)).total,
+          qty: doc.lines.reduce((sum, line) => sum + (Number(line.qty) || 0), 0),
+          lines: doc.lines.map((line) => ({ ...line, amount: lineTotals(line).amount })),
+        }
+      })
+      .sort((a, b) => b.total - a.total)
+  }, [orders, invoices, customers, trackUser, trackDate])
   const selectedUser = fieldStaff.find((u) => u.id === selectedId) ?? null
 
   const openTrack = (id) => {
@@ -107,6 +140,7 @@ export default function LiveLocation() {
           <UserTrackPanel
             user={trackUser}
             track={trackData}
+            sales={userSales}
             date={trackDate}
             onDateChange={(date) => {
               setTrackDate(date)

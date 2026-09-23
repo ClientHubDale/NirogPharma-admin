@@ -32,6 +32,7 @@ const CreditNotes = lazy(() => import('@/components/Sales/CreditNotes/CreditNote
 const PurchaseOrders = lazy(() => import('@/components/Purchase/PurchaseOrders/PurchaseOrders'))
 const PurchaseInvoices = lazy(() => import('@/components/Purchase/PurchaseInvoices/PurchaseInvoices'))
 const PurchaseReturns = lazy(() => import('@/components/Purchase/PurchaseReturns/PurchaseReturns'))
+const PayoutsPage = lazy(() => import('@/components/Users/Payouts/Payouts'))
 const SettingsPage = lazy(() => import('@/components/Settings/Settings'))
 const UsersPage = lazy(() => import('@/components/Users/Users/Users'))
 const Attendance = lazy(() => import('@/components/Attendance/Attendance'))
@@ -81,6 +82,7 @@ const BUILT = {
   '/admin/routes/areas': Areas,
   '/admin/attendance': Attendance,
   '/admin/users': UsersPage,
+  '/admin/users/payouts': PayoutsPage,
   '/admin/settings': SettingsPage,
   '/distributor': DistributorDashboard,
 }

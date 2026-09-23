@@ -40,6 +40,12 @@ export const emptyUserForm = () => ({
   routeIds: [],
   categories: [],
   brands: [],
+  photo: [], // optional profile picture
+  // What User › Payouts works out this person's monthly bill from.
+  salary: '',
+  taPerKm: '',
+  daPerDay: '',
+  incentivePercent: '',
 })
 
 export const userToForm = (user) => ({
@@ -63,6 +69,11 @@ export const formToUser = (form, id) => ({
   routeIds: form.routeIds,
   categories: form.categories,
   brands: form.brands,
+  photo: form.photo,
+  salary: Number(form.salary) || 0,
+  taPerKm: Number(form.taPerKm) || 0,
+  daPerDay: Number(form.daPerDay) || 0,
+  incentivePercent: Number(form.incentivePercent) || 0,
 })
 
 /** Returns { field: message } — empty = valid. */
@@ -82,6 +93,12 @@ export function validateUserForm(form, { users, editingId }) {
     if (form.password !== form.confirmPassword) e.confirmPassword = 'The two passwords do not match.'
   }
   if (form.reportingTo && form.reportingTo === editingId) e.reportingTo = 'A user cannot report to themselves.'
+  // Payout rates
+  for (const [field, label] of [['salary', 'Salary'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day']]) {
+    if (form[field] !== '' && !(Number(form[field]) >= 0)) e[field] = `${label} cannot be negative.`
+  }
+  if (form.incentivePercent !== '' && !(Number(form.incentivePercent) >= 0 && Number(form.incentivePercent) <= 100))
+    e.incentivePercent = 'Incentive is a percentage between 0 and 100.'
   return e
 }
 
@@ -131,6 +148,7 @@ export function rowsToUsers(rows, users) {
       routeIds: [],
       categories: [],
       brands: [],
+      photo: [],
     })
   })
   return { added, skipped }

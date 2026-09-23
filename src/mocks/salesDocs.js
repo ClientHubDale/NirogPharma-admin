@@ -141,6 +141,20 @@ function build(now = new Date()) {
     }
   }
 
+  // Every field user books their own beat over the last two weeks, so opening
+  // anyone in Live Location shows their secondary sales for that day.
+  const field = creators.filter((c) => c.id !== 'admin')
+  for (const [back, date] of days(13)) {
+    for (const user of field) {
+      if (back > 0 && rand() < 0.25) continue // a day off, or a day spent on collections
+      for (let k = 1 + Math.floor(rand() * 2); k > 0; k--) {
+        const r = rand()
+        const status = back > 6 ? (r < 0.65 ? 'DELIVERED' : r < 0.85 ? 'INVOICED' : 'CONFIRMED') : r < 0.45 ? 'PENDING' : r < 0.8 ? 'CONFIRMED' : 'INVOICED'
+        add('SALES_ORDER', { date, party: pick(customers), lines: freshLines(), status, createdBy: user.id })
+      }
+    }
+  }
+
   const partyById = Object.fromEntries(customers.map((c) => [c.id, c]))
   const supplierById = Object.fromEntries(suppliers.map((c) => [c.id, c]))
   const later = (date, max) => {
@@ -204,8 +218,9 @@ function build(now = new Date()) {
 
   /* ── Purchase: orders → invoices → a few returns ── */
   for (const [back, date] of days(50)) {
-    if (rand() < 0.62) continue
-    const status = back > 6 ? (rand() < 0.85 ? 'APPROVED' : 'REJECTED') : rand() < 0.5 ? 'PENDING' : 'APPROVED'
+    if (rand() < 0.35) continue
+    // Recent orders are still waiting for approval; older ones are settled.
+    const status = back > 6 ? (rand() < 0.85 ? 'APPROVED' : 'REJECTED') : back > 2 ? (rand() < 0.5 ? 'PENDING' : 'APPROVED') : 'PENDING'
     add('PURCHASE_ORDER', { date, party: pick(suppliers), lines: costLines(freshLines()), status })
   }
   for (const po of docs.PURCHASE_ORDER.filter((d) => d.status === 'APPROVED')) {
@@ -221,7 +236,7 @@ function build(now = new Date()) {
       received: 0,
     })
   }
-  for (const pi of docs.PURCHASE_INVOICE.filter(() => rand() < 0.18)) {
+  for (const pi of docs.PURCHASE_INVOICE.filter(() => rand() < 0.3)) {
     const lines = pi.lines.slice(0, 1).map((l) => ({ ...l, qty: Math.max(1, Math.round(l.qty * pick([0.2, 0.25, 0.5]))) }))
     add('PURCHASE_RETURN', { date: later(pi.date, 8), party: supplierById[pi.partyId], lines, status: '', source: pi, comment: pick(COMMENTS.PURCHASE_RETURN) })
   }

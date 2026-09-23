@@ -33,6 +33,10 @@ const initialState = {
     photoAtCheckIn: false,
     trackOdometer: false,
     requireOdometer: false,
+    // Salary in the field app: who may see their own payout bill.
+    showSalary: true,
+    salaryVisibleTo: ['ALL'],
+    salaryPerDayTracking: true, // day-by-day working, not just the month's total
   },
 }
 

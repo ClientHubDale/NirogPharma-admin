@@ -1,4 +1,5 @@
 import { FormSection } from '@/components/form/FormSection'
+import { ImageUploader } from '@/components/form/ImageUploader'
 import { MultiSelect } from '@/components/form/MultiSelect'
 import { SelectField } from '@/components/form/SelectField'
 import { Switch } from '@/components/form/Switch'
@@ -81,6 +82,7 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           onChange={set('reportingTo')}
           error={errors.reportingTo}
         />
+        <ImageUploader label="Photo (optional)" images={form.photo} onChange={(images) => onChange('photo', images)} max={1} />
         <div className="sm:col-span-2">
           <p className="mb-2 text-sm font-semibold text-ink">Status</p>
           <Switch
@@ -109,6 +111,53 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
         />
         <MultiSelect id="usr-cities" label="Select City" className="sm:col-span-2" placeholder="Select City" value={form.cityIds} onChange={(next) => onChange('cityIds', pickAccess(next))} options={cityOptions} />
         <MultiSelect id="usr-routes" label="Select Route" className="sm:col-span-2" placeholder="Select Route" value={form.routeIds} onChange={(next) => onChange('routeIds', pickAccess(next))} options={routeOptions} />
+      </FormSection>
+
+      <FormSection title="Payout Details" description="What User › Payouts works this person's monthly bill out from.">
+        <TextField
+          id="usr-salary"
+          label="Monthly salary"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          prefix={<span className="pl-3 text-sm text-ink-muted">₹</span>}
+          value={form.salary}
+          onChange={(e) => onChange('salary', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.salary}
+        />
+        <TextField
+          id="usr-incentive"
+          label="Incentive on sales"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          suffix={<span className="flex h-full items-center border-l border-mint-pale bg-bg px-3 text-sm text-ink-muted">%</span>}
+          value={form.incentivePercent}
+          onChange={(e) => onChange('incentivePercent', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.incentivePercent}
+        />
+        <TextField
+          id="usr-ta"
+          label="TA per km"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          prefix={<span className="pl-3 text-sm text-ink-muted">₹</span>}
+          value={form.taPerKm}
+          onChange={(e) => onChange('taPerKm', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.taPerKm}
+        />
+        <TextField
+          id="usr-da"
+          label="DA per working day"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          prefix={<span className="pl-3 text-sm text-ink-muted">₹</span>}
+          value={form.daPerDay}
+          onChange={(e) => onChange('daPerDay', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.daPerDay}
+        />
       </FormSection>
 
       <FormSection title="Other Access Details" description="Which part of the catalogue this user can sell.">

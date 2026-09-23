@@ -5,6 +5,7 @@ import itemsReducer from './itemsSlice'
 import partiesReducer from './partiesSlice'
 import priceListsReducer from './priceListsSlice'
 import attendanceReducer from './attendanceSlice'
+import payoutsReducer from './payoutsSlice'
 import settingsReducer from './settingsSlice'
 import usersReducer from './usersSlice'
 import paymentsReducer from './paymentsSlice'
@@ -24,6 +25,7 @@ export const store = configureStore({
     attendance: attendanceReducer,
     users: usersReducer,
     settings: settingsReducer,
+    payouts: payoutsReducer,
   },
   middleware: (getDefault) =>
     getDefault({

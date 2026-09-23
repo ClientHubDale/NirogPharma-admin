@@ -48,7 +48,6 @@ export const adminNav = [
       { label: 'Customers', path: `${ADMIN}/parties/customers` },
       { label: 'Suppliers', path: `${ADMIN}/parties/suppliers` },
       { label: 'Visited', path: `${ADMIN}/parties/visited` },
-      { label: 'Groups', path: `${ADMIN}/parties/groups` },
     ],
   },
   {
@@ -93,7 +92,10 @@ export const adminNav = [
   {
     label: 'User',
     icon: UserCog,
-    children: [{ label: 'Users', path: `${ADMIN}/users` }],
+    children: [
+      { label: 'Users', path: `${ADMIN}/users` },
+      { label: 'Payouts', path: `${ADMIN}/users/payouts` },
+    ],
   },
   { label: 'Reports', icon: ClipboardList, path: `${ADMIN}/reports` },
   { label: 'Settings', icon: Settings, path: `${ADMIN}/settings`, footer: true },

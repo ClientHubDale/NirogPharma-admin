@@ -23,6 +23,10 @@ export const INITIAL_USERS = [
     routeIds: [],
     categories: [],
     brands: [],
+    salary: 45000,
+    taPerKm: 0,
+    daPerDay: 0,
+    incentivePercent: 0,
   },
   ...fieldStaff.map((user, i) => ({
     id: user.id,
@@ -39,5 +43,10 @@ export const INITIAL_USERS = [
     // Everyone sells the full range for now; access is narrowed per user later.
     categories: i % 4 === 0 ? INITIAL_CATEGORIES.slice(0, 3) : [],
     brands: i % 5 === 0 ? [INITIAL_BRANDS[0]] : [],
+    // Payout rates — managers are on a higher salary, executives earn more incentive.
+    salary: user.role === 'MANAGER' ? 32000 : 18000 + (i % 4) * 500,
+    taPerKm: 4.5,
+    daPerDay: user.role === 'MANAGER' ? 200 : 150,
+    incentivePercent: user.role === 'MANAGER' ? 1 : 2,
   })),
 ]

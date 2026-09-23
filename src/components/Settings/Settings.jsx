@@ -5,6 +5,7 @@ import { Notice } from '@/components/data/Notice'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { companySaved, mobileAppSaved, selectBank, selectCompany, selectMobileApp, selectOffice } from '@/store/settingsSlice'
+import { selectUsers } from '@/store/usersSlice'
 import { CompanySettings } from './components/CompanySettings'
 import { MobileAppSettings } from './components/MobileAppSettings'
 import { cleanHolidays, validateCompany } from './settingsModel'
@@ -21,6 +22,7 @@ export default function Settings() {
   const savedOffice = useSelector(selectOffice)
   const savedBank = useSelector(selectBank)
   const savedMobileApp = useSelector(selectMobileApp)
+  const staff = useSelector(selectUsers).filter((user) => user.role !== 'ADMIN')
 
   const [tab, setTab] = useState('company')
   const [form, setForm] = useState({ company: savedCompany, office: savedOffice, bank: savedBank })
@@ -98,7 +100,7 @@ export default function Settings() {
           {tab === 'company' ? (
             <CompanySettings company={form.company} office={form.office} bank={form.bank} errors={errors} onChange={change} />
           ) : (
-            <MobileAppSettings mobileApp={mobileApp} onChange={(field, value) => setMobileApp((m) => ({ ...m, [field]: value }))} />
+            <MobileAppSettings mobileApp={mobileApp} staff={staff} onChange={(field, value) => setMobileApp((m) => ({ ...m, [field]: value }))} />
           )}
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ArrowLeft, CalendarDays, Clock3, Gauge, Store } from 'lucide-react'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { cn } from '@/lib/utils'
@@ -5,13 +6,16 @@ import { formatDuration } from '@/lib/format'
 import { LIVE_STATUS_STYLE, liveStatusOf } from '@/lib/liveStatus'
 import { ROLE_LABELS } from '@/constants/roles'
 import { todayISO } from '@/mocks/userTracks'
+import { UserSalesList } from '@/components/liveLocation/UserSalesList'
+import { Tabs } from '@/components/common/Tabs'
 import { TrackTimeline } from './TrackTimeline'
 
 /**
  * Replaces the Users panel when a user is opened from the list:
  * name + back, distance/time totals, a date picker and the day's timeline.
  */
-export function UserTrackPanel({ user, track, date, onDateChange, activeEntryId, onEntrySelect, onBack, className }) {
+export function UserTrackPanel({ user, track, sales, date, onDateChange, activeEntryId, onEntrySelect, onBack, className }) {
+  const [tab, setTab] = useState('timeline')
   const style = LIVE_STATUS_STYLE[liveStatusOf(user)]
   const isToday = date === todayISO()
   const stats = [
@@ -51,7 +55,7 @@ export function UserTrackPanel({ user, track, date, onDateChange, activeEntryId,
       </div>
 
       <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
-        <h3 className="text-sm font-bold">Entries timeline</h3>
+        <h3 className="text-sm font-bold">{tab === 'timeline' ? 'Entries timeline' : 'Secondary sales'}</h3>
         <label className="flex h-9 items-center gap-2 rounded-lg border border-mint px-2.5 focus-within:border-green-fresh focus-within:ring-3 focus-within:ring-ring/25">
           <CalendarDays className="size-4 text-green-deep" aria-hidden />
           <input
@@ -65,14 +69,35 @@ export function UserTrackPanel({ user, track, date, onDateChange, activeEntryId,
         </label>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-24">
-        {track.entries.length ? (
-          <TrackTimeline entries={track.entries} activeId={activeEntryId} onSelect={onEntrySelect} />
-        ) : (
-          <p className="px-4 py-10 text-center text-sm text-ink-muted">
-            {isToday ? `${user.name} hasn’t checked in today.` : 'No activity on this day.'}
-          </p>
-        )}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-24">
+        <Tabs
+          value={tab}
+          onValueChange={setTab}
+          className="px-2 [&_[role=tablist]]:px-2"
+          tabs={[
+            {
+              value: 'timeline',
+              label: 'Timeline',
+              content: track.entries.length ? (
+                <TrackTimeline entries={track.entries} activeId={activeEntryId} onSelect={onEntrySelect} />
+              ) : (
+                <p className="px-4 py-10 text-center text-sm text-ink-muted">
+                  {isToday ? `${user.name} hasn’t checked in today.` : 'No activity on this day.'}
+                </p>
+              ),
+            },
+            {
+              value: 'sales',
+              label: `Secondary sales${sales.length ? ` (${sales.length})` : ''}`,
+              content: (
+                <UserSalesList
+                  sales={sales}
+                  emptyText={isToday ? `${user.name} hasn’t booked a sale today.` : 'No sales booked on this day.'}
+                />
+              ),
+            },
+          ]}
+        />
       </div>
     </aside>
   )
