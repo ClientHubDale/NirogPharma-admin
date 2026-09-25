@@ -163,4 +163,35 @@
   h4 {
     @apply text-black tracking-tight;
   }
+
+  /* ── Scrollbars ──────────────────────────────────────────────
+     The OS bar is grey and boxy; this is a slim mint pill on an
+     invisible track, in every scrollable area (page, sidebar,
+     tables, drawers). Firefox gets the two properties it
+     supports, Chrome/Safari the full treatment. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--green-soft) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    /* transparent border + background-clip keeps the pill off the edge */
+    background-color: var(--mint);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--green-soft);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--green-fresh);
+  }
 }

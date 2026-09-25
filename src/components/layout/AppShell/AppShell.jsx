@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { Outlet, useLocation } from 'react-router-dom'
+import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
+import { cn } from '@/lib/utils'
 import { flattenNav, NAV_BY_ROLE } from '@/constants/navigation'
 import { ROLES } from '@/constants/roles'
 import { selectUser } from '@/store/authSlice'
@@ -15,6 +17,7 @@ export function AppShell() {
   const user = useSelector(selectUser)
   const { pathname } = useLocation()
   const nav = NAV_BY_ROLE[user.role] ?? NO_NAV
+  const [collapsed, toggleCollapsed] = useSidebarCollapsed()
 
   // Title + section for the top bar, from the menu config.
   const current = useMemo(() => {
@@ -27,8 +30,8 @@ export function AppShell() {
 
   return (
     <div className="min-h-full bg-bg">
-      <Sidebar nav={nav} />
-      <div className="lg:pl-68">
+      <Sidebar nav={nav} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
+      <div className={cn('transition-[padding] duration-200', collapsed ? 'lg:pl-[4.5rem]' : 'lg:pl-68')}>
         <Topbar
           nav={nav}
           title={current?.label ?? 'Dashboard'}
