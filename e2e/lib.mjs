@@ -23,7 +23,11 @@ const CHROME =
     existsSync(p),
   )
 
-export const ADMIN = { mobile: '9876500001', password: 'admin@123' }
+/** The real admin, from the backend's .env. Override with E2E_MOBILE / E2E_PASSWORD. */
+export const ADMIN = {
+  mobile: process.env.E2E_MOBILE ?? '7654296611',
+  password: process.env.E2E_PASSWORD ?? 'Abhi1234@',
+}
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -183,9 +187,15 @@ export const overflows = (page) =>
 
 /* ── teardown ────────────────────────────────────────────────────────── */
 
-/** Reports console errors as a check, prints the tally and exits non-zero on failure. */
-export async function finish(browser, errors = []) {
-  const noise = errors.filter((text) => !/favicon|ERR_INTERNET_DISCONNECTED|Download the React DevTools/i.test(text))
+/**
+ * Reports console errors as a check, prints the tally and exits non-zero on
+ * failure. `ignore` is for errors a suite causes on purpose — e.g. the auth
+ * suite signs in with a wrong password, and Chrome logs every failed request.
+ */
+export async function finish(browser, errors = [], { ignore } = {}) {
+  const noise = errors
+    .filter((text) => !/favicon|ERR_INTERNET_DISCONNECTED|Download the React DevTools/i.test(text))
+    .filter((text) => !ignore?.test(text))
   ok('no console errors', noise.length === 0, noise.slice(0, 3).join(' | '))
   await browser.close()
   console.log(`— ${passed} passed, ${failed} failed`)

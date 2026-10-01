@@ -1,7 +1,7 @@
 import { BadgeIndianRupee, CalendarClock, HelpCircle } from 'lucide-react'
 import { MultiSelect } from '@/components/form/MultiSelect'
 import { Switch } from '@/components/form/Switch'
-import { pickAccess, withAllOption } from '@/components/Users/Users/userModel'
+import { pickAccess, ROLE_LABEL, withAllOption } from '@/components/Users/Users/userModel'
 import { APP_MODULES } from '../../settingsModel'
 
 /** A switch row with a short explanation behind the ? */
@@ -105,7 +105,7 @@ export function MobileAppSettings({ mobileApp, staff, onChange }) {
               placeholder="Add a user"
               value={mobileApp.salaryVisibleTo}
               onChange={(next) => onChange('salaryVisibleTo', pickAccess(next))}
-              options={withAllOption('All staff', staff.map((user) => ({ value: user.id, label: user.name, hint: user.designation })))}
+              options={withAllOption('All staff', staff.map((user) => ({ value: user.id, label: user.name, hint: ROLE_LABEL[user.role] })))}
             />
           )}
         </ToggleRow>

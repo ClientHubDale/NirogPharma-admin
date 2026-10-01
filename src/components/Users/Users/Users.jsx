@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { FileSpreadsheet, Pencil, Plus, Settings, Upload, UserCog } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/data/EmptyState'
 import { FormDrawer } from '@/components/data/FormDrawer'
 import { ImportDialog } from '@/components/data/ImportDialog'
 import { Notice } from '@/components/data/Notice'
+import { useToast } from '@/components/common/Toast'
 import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
@@ -18,13 +19,19 @@ import { Switch } from '@/components/form/Switch'
 import { Button } from '@/components/ui/button'
 import { parseCSV } from '@/lib/csv'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
-import { INITIAL_BRANDS, INITIAL_CATEGORIES } from '@/mocks/items'
 import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
-import { selectUsers, userPatched, usersImported, userSaved } from '@/store/usersSlice'
+import {
+  fetchUsers,
+  importUsers as importUsersThunk,
+  saveUser,
+  selectUsers,
+  selectUsersError,
+  selectUsersStatus,
+  setUserStatus,
+} from '@/store/usersSlice'
 import { UserForm } from './components/UserForm'
 import {
   emptyUserForm,
-  formToUser,
   ROLE_LABEL,
   rowsToUsers,
   USER_IMPORT_REQUIRED,
@@ -41,51 +48,94 @@ const ROLE_TONE = { ADMIN: 'info', MANAGER: 'success', EXECUTIVE: 'info' }
 /** User › Users — everyone who signs in, and what they can reach. */
 export default function Users() {
   const dispatch = useDispatch()
+  const toast = useToast()
   const navigate = useNavigate()
   const users = useSelector(selectUsers)
+  const loadStatus = useSelector(selectUsersStatus)
+  const loadError = useSelector(selectUsersError)
   const regions = useSelector(selectRegions)
   const cities = useSelector(selectCities)
   const routes = useSelector(selectRoutes)
 
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('')
+  const [managerId, setManagerId] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 })
   const [drawer, setDrawer] = useState(null) // { form, errors, editingId }
   const [saving, setSaving] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
-  const [notice, setNotice] = useState(null)
+
+  useEffect(() => {
+    dispatch(fetchUsers())
+  }, [dispatch])
 
   const nameOf = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users])
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return users.filter((u) => {
       if (role && u.role !== role) return false
-      return !q || `${u.name} ${u.mobile} ${u.email} ${u.designation}`.toLowerCase().includes(q)
+      // The manager filter lists that manager's team — the manager themselves
+      // is not part of their own team, so they drop out of the results.
+      if (managerId && u.reportingTo !== managerId) return false
+      return !q || `${u.name} ${u.mobile} ${u.email}`.toLowerCase().includes(q)
     })
-  }, [users, search, role])
+  }, [users, search, role, managerId])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pagination.pageSize))
   const page = pagination.pageIndex < pageCount ? pagination : { ...pagination, pageIndex: pageCount - 1 }
   const resetPage = () => setPagination((p) => ({ ...p, pageIndex: 0 }))
 
+  const managerOptions = useMemo(
+    () => users.filter((u) => u.role === 'MANAGER').map((u) => ({ value: u.id, label: u.name })),
+    [users],
+  )
+
   const openCreate = () => setDrawer({ editingId: null, errors: {}, form: emptyUserForm() })
-  const openEdit = (user) => setDrawer({ editingId: user.id, errors: {}, form: userToForm(user) })
+
+  // `initial` is kept so Save can stay greyed out until something is actually
+  // different — editing and saving nothing would be a pointless round trip.
+  const openEdit = (user) => {
+    const form = userToForm(user)
+    setDrawer({ editingId: user.id, errors: {}, form, initial: form })
+  }
+
+  const changed = drawer && (!drawer.editingId || JSON.stringify(drawer.form) !== JSON.stringify(drawer.initial))
 
   const save = async () => {
     const found = validateUserForm(drawer.form, { users, editingId: drawer.editingId })
     if (Object.keys(found).some((k) => found[k])) return setDrawer((d) => ({ ...d, errors: found }))
+
     setSaving(true)
-    await new Promise((r) => setTimeout(r, 350)) // mock network
-    const user = formToUser(drawer.form, drawer.editingId ?? `usr-${Date.now()}`)
-    dispatch(userSaved({ user }))
+    const result = await dispatch(saveUser({ id: drawer.editingId, form: drawer.form }))
     setSaving(false)
+
+    if (saveUser.rejected.match(result)) {
+      // The server checks the same things again, and knows about clashes this
+      // browser cannot see — show its message, and its per-field errors.
+      const { message, details } = result.payload
+      if (details) setDrawer((d) => ({ ...d, errors: { ...d.errors, ...details } }))
+      return toast({ tone: 'danger', title: drawer.editingId ? 'Could not save' : 'Could not create', description: message })
+    }
+
+    const { user, warning } = result.payload
+    const what = ROLE_LABEL[user.role] ?? 'User'
     setDrawer(null)
-    setNotice({ tone: 'success', message: `${user.name} ${drawer.editingId ? 'updated' : 'added'} — signs in with ${user.mobile}.` })
+    toast({
+      tone: warning ? 'warning' : 'success',
+      title: `${what} ${drawer.editingId ? 'updated' : 'created'}`,
+      description: warning ? `${user.name} · ${warning}` : `${user.name} signs in with ${user.mobile}`,
+    })
   }
 
-  const toggleStatus = (user, on) => {
-    dispatch(userPatched({ id: user.id, changes: { status: on ? 'ACTIVE' : 'INACTIVE' } }))
-    setNotice({ tone: 'success', message: `${user.name} is now ${on ? 'active' : 'inactive'}${on ? '' : ' and cannot sign in'}.` })
+  const toggleStatus = async (user, on) => {
+    const result = await dispatch(setUserStatus({ id: user.id, isActive: on }))
+    if (setUserStatus.rejected.match(result)) {
+      return toast({ tone: 'danger', title: 'Could not change the status', description: result.payload.message })
+    }
+    toast({
+      title: on ? 'User activated' : 'User deactivated',
+      description: `${user.name}${on ? '' : ' can no longer sign in'}`,
+    })
   }
 
   const columns = useMemo(
@@ -108,6 +158,11 @@ export default function Users() {
         helper.accessor('role', {
           header: 'Role',
           cell: (i) => <StatusPill tone={ROLE_TONE[i.getValue()] ?? 'neutral'}>{ROLE_LABEL[i.getValue()] ?? i.getValue()}</StatusPill>,
+        }),
+        helper.accessor((user) => nameOf[user.reportingTo] ?? '', {
+          id: 'manager',
+          header: 'Manager',
+          cell: (i) => <span className="text-ink uppercase">{i.getValue() || '—'}</span>,
         }),
         helper.accessor('status', {
           header: 'Status',
@@ -156,13 +211,12 @@ export default function Users() {
         mobile: u.mobile,
         role: ROLE_LABEL[u.role] ?? u.role,
         email: u.email,
-        designation: u.designation,
         reportingTo: nameOf[u.reportingTo] ?? '',
         status: u.status === 'ACTIVE' ? 'Active' : 'Inactive',
       })),
     })
     await downloadWorkbook(`nirog-users-${new Date().toISOString().slice(0, 10)}.xlsx`, wb)
-    setNotice({ tone: 'success', message: `Exported ${filtered.length} ${filtered.length === 1 ? 'user' : 'users'}.` })
+    toast({ title: 'Export ready', description: `${filtered.length} ${filtered.length === 1 ? 'user' : 'users'} downloaded` })
   }
 
   const downloadSample = async () => {
@@ -179,18 +233,30 @@ export default function Users() {
       throw new Error('Couldn’t read this file. Open it in Excel and save it again as .xlsx, then retry.')
     }
     if (!rows.length) throw new Error('The file has no rows under the header. Use Download Sample for the format.')
-    const { added, skipped } = rowsToUsers(rows, users)
-    const reasons = skipped.slice(0, 5).map((s) => `Line ${s.line}: ${s.reason}`)
+    // Shape and check the rows here, then let the API have the final word —
+    // it alone knows which mobile numbers are already taken.
+    const { added: candidates, skipped: localSkips } = rowsToUsers(rows, users)
+    if (!candidates.length) {
+      throw new Error(`No users imported. ${localSkips.slice(0, 5).map((s) => `Line ${s.line}: ${s.reason}`).join(' · ')}`)
+    }
+
+    const result = await dispatch(importUsersThunk({ users: candidates }))
+    if (importUsersThunk.rejected.match(result)) throw new Error(result.payload.message)
+
+    const { added, skipped } = result.payload
+    const reasons = [...localSkips, ...skipped].slice(0, 5).map((s) => `Line ${s.line}: ${s.reason}`)
     if (!added.length) throw new Error(`No users imported. ${reasons.join(' · ')}`)
-    dispatch(usersImported({ users: added }))
-    setNotice({
-      tone: 'success',
-      message: `Imported ${added.length} ${added.length === 1 ? 'user' : 'users'}${skipped.length ? `, skipped ${skipped.length}. ${reasons.join(' · ')}` : '.'} Their password is nirog@123.`,
+    const skippedCount = localSkips.length + skipped.length
+    toast({
+      tone: skippedCount ? 'warning' : 'success',
+      title: `${added.length} ${added.length === 1 ? 'user' : 'users'} imported`,
+      description: `${skippedCount ? `${skippedCount} skipped — ${reasons.join(' · ')}. ` : ''}Their password is nirog@123.`,
     })
   }
 
+  // Staff report to a manager — the admin is not in the line of reporting.
   const userOptions = useMemo(
-    () => users.filter((u) => u.role !== 'EXECUTIVE' && u.id !== drawer?.editingId).map((u) => ({ value: u.id, label: u.name, hint: ROLE_LABEL[u.role] })),
+    () => users.filter((u) => u.role === 'MANAGER' && u.id !== drawer?.editingId).map((u) => ({ value: u.id, label: u.name, hint: ROLE_LABEL[u.role] })),
     [users, drawer?.editingId],
   )
 
@@ -211,9 +277,12 @@ export default function Users() {
         </Button>
       </PageHeader>
 
-      {notice && (
-        <Notice tone={notice.tone} onDismiss={() => setNotice(null)}>
-          {notice.message}
+      {loadStatus === 'failed' && (
+        <Notice tone="danger">
+          {loadError?.message ?? 'Could not load users.'}
+          <button type="button" onClick={() => dispatch(fetchUsers())} className="ml-2 font-semibold underline underline-offset-4">
+            Try again
+          </button>
         </Notice>
       )}
 
@@ -228,7 +297,16 @@ export default function Users() {
             options={USER_ROLES}
             value={role}
             onChange={(v) => { setRole(v); resetPage() }}
-            className="sm:w-56"
+            className="sm:w-48"
+          />
+          <SearchSelect
+            aria-label="Filter by manager"
+            placeholder="Select manager"
+            clearable
+            options={managerOptions}
+            value={managerId}
+            onChange={(v) => { setManagerId(v); resetPage() }}
+            className="sm:w-52"
           />
           <Pagination
             pageIndex={page.pageIndex}
@@ -238,6 +316,11 @@ export default function Users() {
             className="justify-between sm:ml-auto sm:justify-end"
           />
         </div>
+        {loadStatus === 'loading' && !users.length ? (
+          <div className="grid min-h-60 place-items-center" role="status" aria-label="Loading users">
+            <span className="size-8 animate-spin rounded-full border-3 border-mint border-t-green-deep" />
+          </div>
+        ) : (
         <DataTable
           data={filtered}
           columns={columns}
@@ -248,7 +331,7 @@ export default function Users() {
           empty={
             <EmptyState
               icon={UserCog}
-              title={search || role ? 'No users match' : 'No users yet'}
+              title={search || role || managerId ? 'No users match' : 'No users yet'}
               description="Users sign in with their mobile number and password — the admin creates every account."
             >
               <Button size="lg" onClick={openCreate}>
@@ -257,6 +340,7 @@ export default function Users() {
             </EmptyState>
           }
         />
+        )}
       </section>
 
       <FormDrawer
@@ -266,6 +350,8 @@ export default function Users() {
         description={drawer?.editingId ? drawer.form.mobile : 'Fields marked * are required.'}
         onSubmit={save}
         saving={saving}
+        saveDisabled={!changed}
+        saveHint="Change something first"
         saveLabel={drawer?.editingId ? 'Save changes' : 'Save'}
       >
         {drawer && (
@@ -278,8 +364,6 @@ export default function Users() {
             regions={regions}
             cities={cities}
             routes={routes}
-            categories={INITIAL_CATEGORIES}
-            brands={INITIAL_BRANDS}
           />
         )}
       </FormDrawer>

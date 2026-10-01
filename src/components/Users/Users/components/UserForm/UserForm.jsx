@@ -10,7 +10,7 @@ import { isAllAccess, pickAccess, USER_ROLES, withAllOption } from '../../userMo
  * Create / edit user: who they are and what they can see.
  * Geography and catalogue access narrow what the mobile app shows them.
  */
-export function UserForm({ form, errors, onChange, editing, userOptions, regions, cities, routes, categories, brands }) {
+export function UserForm({ form, errors, onChange, editing, userOptions, regions, cities, routes }) {
   const set = (field) => (value) => onChange(field, value)
   const allRegions = isAllAccess(form.regionIds)
   const allCities = isAllAccess(form.cityIds)
@@ -45,7 +45,20 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           onChange={(e) => onChange('mobile', e.target.value.replace(/\D/g, ''))}
           error={errors.mobile}
         />
-        <SelectField id="usr-role" label="Role" required placeholder="Select user" options={USER_ROLES} value={form.role} onChange={set('role')} error={errors.role} />
+        <SelectField
+          id="usr-role"
+          label="Role"
+          required
+          placeholder="Select user"
+          options={USER_ROLES}
+          value={form.role}
+          onChange={(value) => {
+            onChange('role', value)
+            // Managers are the top of the sales line — they report to nobody.
+            if (value !== 'EXECUTIVE') onChange('reportingTo', '')
+          }}
+          error={errors.role}
+        />
         <TextField id="usr-email" label="Email" size="md" type="email" placeholder="Email address" value={form.email} onChange={(e) => onChange('email', e.target.value)} error={errors.email} />
         <TextField
           id="usr-password"
@@ -71,17 +84,19 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           onChange={(e) => onChange('confirmPassword', e.target.value)}
           error={errors.confirmPassword}
         />
-        <TextField id="usr-designation" label="Designation" size="md" placeholder="Designation" value={form.designation} onChange={(e) => onChange('designation', e.target.value)} />
-        <SelectField
-          id="usr-reporting"
-          label="Reporting To"
-          placeholder="Select user"
-          clearable
-          options={userOptions}
-          value={form.reportingTo}
-          onChange={set('reportingTo')}
-          error={errors.reportingTo}
-        />
+        {/* Only an executive reports to somebody, so the field appears with that role. */}
+        {form.role === 'EXECUTIVE' && (
+          <SelectField
+            id="usr-reporting"
+            label="Reporting To"
+            placeholder="Select manager"
+            clearable
+            options={userOptions}
+            value={form.reportingTo}
+            onChange={set('reportingTo')}
+            error={errors.reportingTo}
+          />
+        )}
         <ImageUploader label="Photo (optional)" images={form.photo} onChange={(images) => onChange('photo', images)} max={1} />
         <div className="sm:col-span-2">
           <p className="mb-2 text-sm font-semibold text-ink">Status</p>
@@ -137,6 +152,17 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           error={errors.incentivePercent}
         />
         <TextField
+          id="usr-target"
+          label="Monthly target"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          prefix={<span className="pl-3 text-sm text-ink-muted">₹</span>}
+          value={form.target}
+          onChange={(e) => onChange('target', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.target}
+        />
+        <TextField
           id="usr-ta"
           label="TA per km"
           size="md"
@@ -158,18 +184,6 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           onChange={(e) => onChange('daPerDay', e.target.value.replace(/[^\d.]/g, ''))}
           error={errors.daPerDay}
         />
-      </FormSection>
-
-      <FormSection title="Other Access Details" description="Which part of the catalogue this user can sell.">
-        <MultiSelect
-          id="usr-categories"
-          label="Category"
-          placeholder="All categories"
-          value={form.categories}
-          onChange={set('categories')}
-          options={categories.map((c) => ({ value: c, label: c }))}
-        />
-        <MultiSelect id="usr-brands" label="Brand" placeholder="All brands" value={form.brands} onChange={set('brands')} options={brands.map((b) => ({ value: b, label: b }))} />
       </FormSection>
     </div>
   )

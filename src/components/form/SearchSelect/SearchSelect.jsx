@@ -99,6 +99,7 @@ export function SearchSelect({
         <Popover.Content
           align="start"
           sideOffset={6}
+          collisionPadding={12}
           onOpenAutoFocus={(e) => {
             if (!searchable) {
               e.preventDefault()
@@ -106,7 +107,9 @@ export function SearchSelect({
             }
           }}
           onKeyDown={onKeyDown}
-          className="z-50 w-(--radix-popover-trigger-width) min-w-48 overflow-hidden rounded-xl border border-mint-pale bg-white shadow-lift outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          // max-h from Radix's own measurement, so a field near the bottom of
+          // the screen still gets a list you can scroll instead of a clipped one.
+          className="z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) min-w-48 flex-col overflow-hidden rounded-xl border border-mint-pale bg-white shadow-lift outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           {searchable && (
             <label className="flex items-center gap-2 border-b border-mint-pale px-3">
@@ -127,7 +130,7 @@ export function SearchSelect({
               />
             </label>
           )}
-          <ul ref={listRef} id={listId} role="listbox" tabIndex={-1} className="max-h-64 overflow-y-auto p-1.5 outline-none">
+          <ul ref={listRef} id={listId} role="listbox" tabIndex={-1} className="max-h-64 min-h-0 flex-1 overflow-y-auto p-1.5 outline-none">
             {filtered.length === 0 ? (
               <li className="px-3 py-2.5 text-sm text-ink-muted">No matches</li>
             ) : (

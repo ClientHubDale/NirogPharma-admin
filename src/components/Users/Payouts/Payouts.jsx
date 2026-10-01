@@ -78,7 +78,7 @@ export default function Payouts() {
     const q = search.trim().toLowerCase()
     return rows.filter((row) => {
       if (status && row.payout.status !== status) return false
-      return !q || `${row.user.name} ${row.user.designation}`.toLowerCase().includes(q)
+      return !q || `${row.user.name} ${row.user.mobile}`.toLowerCase().includes(q)
     })
   }, [rows, search, status])
 

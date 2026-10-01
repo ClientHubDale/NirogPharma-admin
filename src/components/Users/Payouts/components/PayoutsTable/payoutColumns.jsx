@@ -3,6 +3,7 @@ import { BadgeIndianRupee, CheckCircle2, Pencil, RotateCcw } from 'lucide-react'
 import { listFeatures } from '@/components/data/DataTable'
 import { RowActions } from '@/components/data/RowActions'
 import { StatusPill } from '@/components/data/StatusPill'
+import { ROLE_LABEL } from '@/components/Users/Users/userModel'
 import { formatPrice } from '@/lib/format'
 import { PAYOUT_STATUS } from '../../payoutModel'
 
@@ -19,7 +20,7 @@ export function buildPayoutColumns({ onEdit, onSetStatus }) {
       cell: ({ row, getValue }) => (
         <div className="min-w-[10rem]">
           <p className="font-semibold text-black uppercase">{getValue()}</p>
-          <p className="text-xs text-ink-muted">{row.original.user.designation || '—'}</p>
+          <p className="text-xs text-ink-muted">{ROLE_LABEL[row.original.user.role] ?? '—'}</p>
         </div>
       ),
     }),

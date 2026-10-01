@@ -26,6 +26,18 @@ function writeSession(session, remember) {
   }
 }
 
+/** Updates the saved user in place, leaving the token and its storage alone. */
+function writeSessionUser(user) {
+  for (const store of [localStorage, sessionStorage]) {
+    try {
+      const raw = store.getItem(STORAGE_KEY)
+      if (raw) store.setItem(STORAGE_KEY, JSON.stringify({ ...JSON.parse(raw), user }))
+    } catch {
+      // Storage unavailable — the session just won't survive a reload.
+    }
+  }
+}
+
 function clearSession() {
   try {
     localStorage.removeItem(STORAGE_KEY)
@@ -53,6 +65,23 @@ export const logoutUser = createAsyncThunk('auth/logout', async () => {
   clearSession()
 })
 
+/**
+ * Checks the saved session against the server on start-up. The account may
+ * have been disabled, the password changed from somewhere else, or the admin
+ * moved to a new mobile number in .env — in all of those the stored token is
+ * dead and the user must not be left looking at a signed-in shell.
+ */
+export const restoreSession = createAsyncThunk('auth/restore', async (_arg, { rejectWithValue }) => {
+  try {
+    return await authService.fetchMe()
+  } catch (error) {
+    // Only a refused session signs you out; a backend that is merely down or
+    // unreachable leaves you where you are.
+    if (error.response?.status === 401 || error.response?.status === 403) return rejectWithValue('ended')
+    throw error
+  }
+})
+
 const saved = readSession()
 
 const authSlice = createSlice({
@@ -67,6 +96,13 @@ const authSlice = createSlice({
     clearAuthError(state) {
       state.error = null
       if (state.status === 'failed') state.status = 'idle'
+    },
+    /** The server refused the session — sign out without calling the API. */
+    sessionEnded(state) {
+      clearSession()
+      state.user = null
+      state.accessToken = null
+      state.status = 'idle'
     },
   },
   extraReducers: (builder) => {
@@ -88,10 +124,21 @@ const authSlice = createSlice({
         state.user = null
         state.accessToken = null
       })
+      // Name, role or status may have changed server-side since the last visit.
+      .addCase(restoreSession.fulfilled, (state, action) => {
+        state.user = action.payload
+        writeSessionUser(action.payload)
+      })
+      .addCase(restoreSession.rejected, (state, action) => {
+        if (action.payload !== 'ended') return
+        clearSession()
+        state.user = null
+        state.accessToken = null
+      })
   },
 })
 
-export const { clearAuthError } = authSlice.actions
+export const { clearAuthError, sessionEnded } = authSlice.actions
 
 export const selectUser = (state) => state.auth.user
 export const selectIsAuthenticated = (state) => Boolean(state.auth.accessToken)

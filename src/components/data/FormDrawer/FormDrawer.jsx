@@ -6,7 +6,19 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
  * Right-side drawer for create/edit forms: sticky header with title and
  * Save / Cancel, scrolling body. The body is a <form> so Enter submits.
  */
-export function FormDrawer({ open, onOpenChange, title, description, onSubmit, saving, saveLabel = 'Save', children }) {
+export function FormDrawer({
+  open,
+  onOpenChange,
+  title,
+  description,
+  onSubmit,
+  saving,
+  saveLabel = 'Save',
+  /** Greys out Save — e.g. an edit where nothing has been changed yet. */
+  saveDisabled = false,
+  saveHint,
+  children,
+}) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -44,7 +56,7 @@ export function FormDrawer({ open, onOpenChange, title, description, onSubmit, s
               <Button type="button" variant="outline" size="lg" className="px-3.5 sm:px-5" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" size="lg" className="px-3.5 sm:px-5" disabled={saving}>
+              <Button type="submit" size="lg" className="px-3.5 sm:px-5" disabled={saving || saveDisabled} title={saveDisabled ? saveHint : undefined}>
                 {saving && <Loader2 className="animate-spin" data-icon="inline-start" />}
                 {saveLabel}
               </Button>

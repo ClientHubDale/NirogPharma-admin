@@ -88,6 +88,7 @@ export function MultiSelect({ id, label, required, value, onChange, options, pla
           <Popover.Content
             align="start"
             sideOffset={6}
+            collisionPadding={12}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') {
                 e.preventDefault()
@@ -100,7 +101,9 @@ export function MultiSelect({ id, label, required, value, onChange, options, pla
                 if (filtered[highlight]) toggle(filtered[highlight])
               }
             }}
-            className="z-50 w-(--radix-popover-trigger-width) min-w-64 overflow-hidden rounded-xl border border-mint-pale bg-white shadow-lift outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+            // max-h from Radix's own measurement: however little room is left
+            // below (or above) the field, the list stays on screen and scrolls.
+            className="z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) min-w-64 flex-col overflow-hidden rounded-xl border border-mint-pale bg-white shadow-lift outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
           >
             <label className="flex items-center gap-2 border-b border-mint-pale px-3">
               <Search className="size-4 text-ink-muted" aria-hidden />
@@ -119,7 +122,7 @@ export function MultiSelect({ id, label, required, value, onChange, options, pla
               />
               {value.length > 0 && <span className="shrink-0 text-xs text-ink-muted">{value.length} selected</span>}
             </label>
-            <ul id={listId} role="listbox" aria-multiselectable className="max-h-64 overflow-y-auto p-1.5">
+            <ul id={listId} role="listbox" aria-multiselectable className="max-h-64 min-h-0 flex-1 overflow-y-auto p-1.5">
               {filtered.length === 0 ? (
                 <li className="px-3 py-2.5 text-sm text-ink-muted">No matches</li>
               ) : (

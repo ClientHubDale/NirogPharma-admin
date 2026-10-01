@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit'
-import authReducer from './authSlice'
+import { setSessionEndedHandler } from '@/services/api'
+import authReducer, { sessionEnded } from './authSlice'
 import geographyReducer from './geographySlice'
 import itemsReducer from './itemsSlice'
 import partiesReducer from './partiesSlice'
@@ -37,3 +38,7 @@ export const store = configureStore({
       },
     }),
 })
+
+// A 401 the refresh cookie cannot fix ends the session here, wherever in the
+// app the request came from.
+setSessionEndedHandler(() => store.dispatch(sessionEnded()))

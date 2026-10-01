@@ -3,12 +3,17 @@
  * password for every role (there is no self-signup), so the mobile number is
  * the unique key.
  */
+/**
+ * Roles the admin can hand out. There is no Admin here on purpose: the single
+ * admin account comes from the backend's .env, not from this screen.
+ */
 export const USER_ROLES = [
-  { value: 'ADMIN', label: 'Admin' },
   { value: 'MANAGER', label: 'Manager' },
   { value: 'EXECUTIVE', label: 'Sales Executive' },
 ]
-export const ROLE_LABEL = Object.fromEntries(USER_ROLES.map((r) => [r.value, r.label]))
+
+/** Every role that can appear on a user, including the admin, for display. */
+export const ROLE_LABEL = { ADMIN: 'Admin', ...Object.fromEntries(USER_ROLES.map((r) => [r.value, r.label])) }
 
 /**
  * Access lists use an explicit "All …" entry (as in the client's reference).
@@ -32,17 +37,15 @@ export const emptyUserForm = () => ({
   email: '',
   password: '',
   confirmPassword: '',
-  designation: '',
   reportingTo: '',
   status: 'ACTIVE',
   regionIds: [],
   cityIds: [],
   routeIds: [],
-  categories: [],
-  brands: [],
   photo: [], // optional profile picture
   // What User › Payouts works out this person's monthly bill from.
   salary: '',
+  target: '', // monthly sales target
   taPerKm: '',
   daPerDay: '',
   incentivePercent: '',
@@ -61,16 +64,14 @@ export const formToUser = (form, id) => ({
   mobile: form.mobile.trim(),
   email: form.email.trim(),
   role: form.role,
-  designation: form.designation.trim(),
   reportingTo: form.reportingTo,
   status: form.status,
   regionIds: form.regionIds,
   cityIds: form.cityIds,
   routeIds: form.routeIds,
-  categories: form.categories,
-  brands: form.brands,
   photo: form.photo,
   salary: Number(form.salary) || 0,
+  target: Number(form.target) || 0,
   taPerKm: Number(form.taPerKm) || 0,
   daPerDay: Number(form.daPerDay) || 0,
   incentivePercent: Number(form.incentivePercent) || 0,
@@ -94,7 +95,7 @@ export function validateUserForm(form, { users, editingId }) {
   }
   if (form.reportingTo && form.reportingTo === editingId) e.reportingTo = 'A user cannot report to themselves.'
   // Payout rates
-  for (const [field, label] of [['salary', 'Salary'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day']]) {
+  for (const [field, label] of [['salary', 'Salary'], ['target', 'Target'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day']]) {
     if (form[field] !== '' && !(Number(form[field]) >= 0)) e[field] = `${label} cannot be negative.`
   }
   if (form.incentivePercent !== '' && !(Number(form.incentivePercent) >= 0 && Number(form.incentivePercent) <= 100))
@@ -107,14 +108,13 @@ export const USER_SHEET_COLUMNS = [
   { key: 'mobile', header: 'Mobile', width: 14, required: true },
   { key: 'role', header: 'Role', width: 16, required: true },
   { key: 'email', header: 'Email', width: 28 },
-  { key: 'designation', header: 'Designation', width: 22 },
   { key: 'reportingTo', header: 'Reporting To', width: 24 },
   { key: 'status', header: 'Status', width: 12 },
 ]
 
 export const USER_SAMPLE_ROWS = [
-  { name: 'Ramesh Verma', mobile: '9876543210', role: 'Sales Executive', email: '', designation: 'Sales Executive', reportingTo: 'Sunil Deshmukh', status: 'Active' },
-  { name: 'Kavita Joshi', mobile: '9876543211', role: 'Manager', email: 'kavita@nirogpharma.in', designation: 'Area Sales Manager', reportingTo: '', status: 'Active' },
+  { name: 'Ramesh Verma', mobile: '9876543210', role: 'Sales Executive', email: '', reportingTo: 'Sunil Deshmukh', status: 'Active' },
+  { name: 'Kavita Joshi', mobile: '9876543211', role: 'Manager', email: 'kavita@nirogpharma.in', reportingTo: '', status: 'Active' },
 ]
 
 export const USER_IMPORT_REQUIRED = 'Name, Mobile (10 digits, not already used) and Role. Imported users get the password nirog@123 and must change it at first login.'
@@ -140,14 +140,11 @@ export function rowsToUsers(rows, users) {
       mobile,
       email: String(raw.email ?? '').trim(),
       role: role.value,
-      designation: String(raw.designation ?? '').trim(),
       reportingTo,
       status: String(raw.status ?? '').trim().toLowerCase() === 'inactive' ? 'INACTIVE' : 'ACTIVE',
       regionIds: [],
       cityIds: [],
       routeIds: [],
-      categories: [],
-      brands: [],
       photo: [],
     })
   })

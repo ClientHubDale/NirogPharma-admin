@@ -21,7 +21,7 @@ import { TextField } from '@/components/form/TextField'
 import { Logo } from '@/components/common/Logo'
 import { downloadHref, site } from '@/constants/site'
 import { homePathForRole } from '@/constants/roles'
-import { AUTH_ERRORS, DEMO_ACCOUNTS } from '@/services/authService'
+import { AUTH_ERRORS, DEMO_ACCOUNTS, DEMO_MODE } from '@/services/authService'
 import { clearAuthError, loginUser, selectAuthError, selectAuthStatus } from '@/store/authSlice'
 
 const MOBILE_PATTERN = /^[6-9]\d{9}$/
@@ -108,9 +108,9 @@ function AuthNotice({ error }) {
   )
 }
 
-/** Dev-only helper: click an account to fill the form. Never shown in production builds. */
+/** Dev-only helper: click an account to fill the form. Only while demo auth is on. */
 function DemoAccounts({ onPick }) {
-  if (!import.meta.env.DEV) return null
+  if (!import.meta.env.DEV || !DEMO_MODE) return null
   return (
     <div className="mt-8 rounded-xl border border-dashed border-green-soft bg-white/60 p-4">
       <p className="text-xs font-semibold tracking-wide text-green-deep uppercase">Demo accounts · dev only</p>
