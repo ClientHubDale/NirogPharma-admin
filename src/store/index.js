@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { setSessionEndedHandler } from '@/services/api'
 import authReducer, { sessionEnded } from './authSlice'
+import distributorsReducer from './distributorsSlice'
 import geographyReducer from './geographySlice'
 import itemsReducer from './itemsSlice'
 import partiesReducer from './partiesSlice'
@@ -25,6 +26,7 @@ export const store = configureStore({
     payments: paymentsReducer,
     attendance: attendanceReducer,
     users: usersReducer,
+    distributors: distributorsReducer,
     settings: settingsReducer,
     payouts: payoutsReducer,
   },

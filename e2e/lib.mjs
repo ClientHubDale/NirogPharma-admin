@@ -181,6 +181,27 @@ export async function waitFile(dl, { match = /./, timeout = 15000 } = {}) {
   throw new Error(`No download matching ${match} within ${timeout}ms`)
 }
 
+/**
+ * The text of the toast in the corner, waited for. Reading `[data-state=open]`
+ * instead picks up the drawer too, which is also "open".
+ */
+export async function waitForToast(page, { timeout = 6000 } = {}) {
+  const deadline = Date.now() + timeout
+  const read = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[data-toast]')]
+        .map((el) => el.innerText.replace(/\s+/g, ' ').trim())
+        .join(' | '),
+    )
+
+  while (Date.now() < deadline) {
+    const text = await read()
+    if (text) return text
+    await sleep(150)
+  }
+  return ''
+}
+
 /** Horizontal overflow — the mobile-width check every screen gets. */
 export const overflows = (page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)

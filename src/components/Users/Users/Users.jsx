@@ -19,7 +19,8 @@ import { Switch } from '@/components/form/Switch'
 import { Button } from '@/components/ui/button'
 import { parseCSV } from '@/lib/csv'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
-import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
+import { fetchDistributors, selectDistributors } from '@/store/distributorsSlice'
+import { selectCities, selectRegions } from '@/store/geographySlice'
 import {
   fetchUsers,
   importUsers as importUsersThunk,
@@ -51,15 +52,16 @@ export default function Users() {
   const toast = useToast()
   const navigate = useNavigate()
   const users = useSelector(selectUsers)
+  const distributors = useSelector(selectDistributors)
   const loadStatus = useSelector(selectUsersStatus)
   const loadError = useSelector(selectUsersError)
   const regions = useSelector(selectRegions)
   const cities = useSelector(selectCities)
-  const routes = useSelector(selectRoutes)
 
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('')
   const [managerId, setManagerId] = useState('')
+  const [distributorId, setDistributorId] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 })
   const [drawer, setDrawer] = useState(null) // { form, errors, editingId }
   const [saving, setSaving] = useState(false)
@@ -67,6 +69,8 @@ export default function Users() {
 
   useEffect(() => {
     dispatch(fetchUsers())
+    // The form offers distributors, and the table names them.
+    dispatch(fetchDistributors())
   }, [dispatch])
 
   const nameOf = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.name])), [users])
@@ -77,9 +81,10 @@ export default function Users() {
       // The manager filter lists that manager's team — the manager themselves
       // is not part of their own team, so they drop out of the results.
       if (managerId && u.reportingTo !== managerId) return false
+      if (distributorId && u.distributorId !== distributorId) return false
       return !q || `${u.name} ${u.mobile} ${u.email}`.toLowerCase().includes(q)
     })
-  }, [users, search, role, managerId])
+  }, [users, search, role, managerId, distributorId])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pagination.pageSize))
   const page = pagination.pageIndex < pageCount ? pagination : { ...pagination, pageIndex: pageCount - 1 }
@@ -88,6 +93,12 @@ export default function Users() {
   const managerOptions = useMemo(
     () => users.filter((u) => u.role === 'MANAGER').map((u) => ({ value: u.id, label: u.name })),
     [users],
+  )
+
+  // managerId travels with the option so the form can narrow by manager.
+  const distributorOptions = useMemo(
+    () => distributors.map((d) => ({ value: d.id, label: d.name, hint: d.managerName, managerId: d.managerId })),
+    [distributors],
   )
 
   const openCreate = () => setDrawer({ editingId: null, errors: {}, form: emptyUserForm() })
@@ -162,6 +173,10 @@ export default function Users() {
         helper.accessor((user) => nameOf[user.reportingTo] ?? '', {
           id: 'manager',
           header: 'Manager',
+          cell: (i) => <span className="text-ink uppercase">{i.getValue() || '—'}</span>,
+        }),
+        helper.accessor('distributorName', {
+          header: 'Distributor',
           cell: (i) => <span className="text-ink uppercase">{i.getValue() || '—'}</span>,
         }),
         helper.accessor('status', {
@@ -308,6 +323,15 @@ export default function Users() {
             onChange={(v) => { setManagerId(v); resetPage() }}
             className="sm:w-52"
           />
+          <SearchSelect
+            aria-label="Filter by distributor"
+            placeholder="Select distributor"
+            clearable
+            options={distributorOptions}
+            value={distributorId}
+            onChange={(v) => { setDistributorId(v); resetPage() }}
+            className="sm:w-52"
+          />
           <Pagination
             pageIndex={page.pageIndex}
             pageSize={page.pageSize}
@@ -331,7 +355,7 @@ export default function Users() {
           empty={
             <EmptyState
               icon={UserCog}
-              title={search || role || managerId ? 'No users match' : 'No users yet'}
+              title={search || role || managerId || distributorId ? 'No users match' : 'No users yet'}
               description="Users sign in with their mobile number and password — the admin creates every account."
             >
               <Button size="lg" onClick={openCreate}>
@@ -361,9 +385,9 @@ export default function Users() {
             editing={Boolean(drawer.editingId)}
             onChange={(field, value) => setDrawer((d) => ({ ...d, form: { ...d.form, [field]: value }, errors: { ...d.errors, [field]: undefined } }))}
             userOptions={userOptions}
+            distributorOptions={distributorOptions}
             regions={regions}
             cities={cities}
-            routes={routes}
           />
         )}
       </FormDrawer>

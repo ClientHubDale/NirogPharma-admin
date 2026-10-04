@@ -43,6 +43,9 @@ export function ToastProvider({ children }) {
           return (
             <RadixToast.Root
               key={id}
+              // A stable hook for the browser suites — Radix's own attributes
+              // differ between the root and the viewport it portals into.
+              data-toast={tone}
               duration={DURATION[tone] ?? 3500}
               onOpenChange={(open) => !open && dismiss(id)}
               className={cn(

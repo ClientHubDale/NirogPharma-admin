@@ -47,6 +47,7 @@ export const adminNav = [
     children: [
       { label: 'Customers', path: `${ADMIN}/parties/customers` },
       { label: 'Suppliers', path: `${ADMIN}/parties/suppliers` },
+      { label: 'Distributors', path: `${ADMIN}/parties/distributors` },
       { label: 'Visited', path: `${ADMIN}/parties/visited` },
     ],
   },

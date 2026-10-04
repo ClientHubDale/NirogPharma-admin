@@ -2,7 +2,7 @@
  * User › Users against the real API: the form's shape, and that what you save
  * is actually in the database (not just in the browser's memory).
  */
-import { start, login, goto, sleep, ok, eq, has, finish, rows, pageText, overflows, clickText, pickOption, ADMIN } from '../lib.mjs'
+import { start, login, goto, sleep, ok, eq, has, finish, rows, pageText, overflows, clickText, pickOption, ADMIN, waitForToast } from '../lib.mjs'
 
 const API = process.env.E2E_API ?? 'http://localhost:5000/api/v1'
 const MANAGER = { name: 'E2E Manager', mobile: '6900000021' }
@@ -51,6 +51,8 @@ ok('Designation is gone', !labels.includes('Designation') && !form.includes('Des
 ok('the Other Access Details section is gone', !form.includes('Other Access Details'))
 has('Payout Details is still there', form, 'Payout Details')
 ok('Monthly target is a payout field', Boolean(await page.$('#usr-target')))
+ok('the Route picker is gone', !(await page.$('#usr-routes')) && !form.includes('Select Route'))
+ok('Region and City are still there', Boolean(await page.$('#usr-regions')) && Boolean(await page.$('#usr-cities')))
 
 await page.click('#usr-role')
 await page.waitForSelector('[role=listbox]')
@@ -108,7 +110,7 @@ await fill(MANAGER, 'Manager', { '#usr-salary': '32000', '#usr-target': '900000'
 await clickText(page, 'footer button, header button', 'Save')
 await sleep(1500)
 
-const toastText = async () => (await page.evaluate(() => [...document.querySelectorAll('[data-state=open]')].map((e) => e.textContent.trim()).join(' | '))) ?? ''
+const toastText = () => waitForToast(page)
 
 const created = await toastText()
 has('a toast says a manager was created', created, 'Manager created')
@@ -203,7 +205,13 @@ await sleep(400)
 await fill({ name: 'Clash', mobile: EXEC.mobile }, 'Sales Executive')
 await clickText(page, 'footer button, header button', 'Save')
 await sleep(1200)
-has('a mobile already in use is refused', await toastText(), 'already signs in with this number')
+// The panel knows the mobile numbers it is showing, so it catches this before
+// the request is made — the message appears under the field, not as a toast.
+has(
+  'a mobile already in use is refused',
+  await page.$eval('#usr-mobile-error', (el) => el.textContent.trim()).catch(() => ''),
+  'already signs in with this number',
+)
 await clickText(page, 'header button', 'Cancel')
 await sleep(500)
 

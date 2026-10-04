@@ -10,23 +10,12 @@ import { isAllAccess, pickAccess, USER_ROLES, withAllOption } from '../../userMo
  * Create / edit user: who they are and what they can see.
  * Geography and catalogue access narrow what the mobile app shows them.
  */
-export function UserForm({ form, errors, onChange, editing, userOptions, regions, cities, routes }) {
+export function UserForm({ form, errors, onChange, editing, userOptions, distributorOptions = [], regions, cities }) {
   const set = (field) => (value) => onChange(field, value)
   const allRegions = isAllAccess(form.regionIds)
-  const allCities = isAllAccess(form.cityIds)
   const cityOptions = withAllOption(
     'All cities',
     cities.filter((c) => allRegions || form.regionIds.includes(c.regionId)).map((c) => ({ value: c.id, label: c.name })),
-  )
-  const routeOptions = withAllOption(
-    'All routes',
-    routes
-      .filter((r) => {
-        if (!allCities) return form.cityIds.includes(r.cityId)
-        if (!allRegions) return form.regionIds.includes(cities.find((c) => c.id === r.cityId)?.regionId)
-        return true
-      })
-      .map((r) => ({ value: r.id, label: r.name, hint: cities.find((c) => c.id === r.cityId)?.name })),
   )
 
   return (
@@ -54,8 +43,12 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           value={form.role}
           onChange={(value) => {
             onChange('role', value)
-            // Managers are the top of the sales line — they report to nobody.
-            if (value !== 'EXECUTIVE') onChange('reportingTo', '')
+            // Managers are the top of the sales line — they report to nobody and
+            // own distributors rather than working under one.
+            if (value !== 'EXECUTIVE') {
+              onChange('reportingTo', '')
+              onChange('distributorId', '')
+            }
           }}
           error={errors.role}
         />
@@ -84,18 +77,36 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           onChange={(e) => onChange('confirmPassword', e.target.value)}
           error={errors.confirmPassword}
         />
-        {/* Only an executive reports to somebody, so the field appears with that role. */}
+        {/* Only an executive reports to somebody, so these appear with that role. */}
         {form.role === 'EXECUTIVE' && (
-          <SelectField
-            id="usr-reporting"
-            label="Reporting To"
-            placeholder="Select manager"
-            clearable
-            options={userOptions}
-            value={form.reportingTo}
-            onChange={set('reportingTo')}
-            error={errors.reportingTo}
-          />
+          <>
+            <SelectField
+              id="usr-reporting"
+              label="Reporting To"
+              placeholder="Select manager"
+              clearable
+              options={userOptions}
+              value={form.reportingTo}
+              onChange={(value) => {
+                onChange('reportingTo', value)
+                // The distributor below belongs to the manager who was chosen before.
+                if (form.distributorId && !distributorOptions.some((d) => d.value === form.distributorId && d.managerId === value)) {
+                  onChange('distributorId', '')
+                }
+              }}
+              error={errors.reportingTo}
+            />
+            <SelectField
+              id="usr-distributor"
+              label="Distributor"
+              placeholder={form.reportingTo ? 'Select distributor' : 'Choose a manager first'}
+              clearable
+              options={form.reportingTo ? distributorOptions.filter((d) => d.managerId === form.reportingTo) : distributorOptions}
+              value={form.distributorId}
+              onChange={set('distributorId')}
+              error={errors.distributorId}
+            />
+          </>
         )}
         <ImageUploader label="Photo (optional)" images={form.photo} onChange={(images) => onChange('photo', images)} max={1} />
         <div className="sm:col-span-2">
@@ -125,7 +136,6 @@ export function UserForm({ form, errors, onChange, editing, userOptions, regions
           options={withAllOption('All regions', regions.map((r) => ({ value: r.id, label: r.name })))}
         />
         <MultiSelect id="usr-cities" label="Select City" className="sm:col-span-2" placeholder="Select City" value={form.cityIds} onChange={(next) => onChange('cityIds', pickAccess(next))} options={cityOptions} />
-        <MultiSelect id="usr-routes" label="Select Route" className="sm:col-span-2" placeholder="Select Route" value={form.routeIds} onChange={(next) => onChange('routeIds', pickAccess(next))} options={routeOptions} />
       </FormSection>
 
       <FormSection title="Payout Details" description="What User › Payouts works this person's monthly bill out from.">

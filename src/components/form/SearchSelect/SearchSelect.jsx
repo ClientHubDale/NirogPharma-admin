@@ -24,7 +24,16 @@ export function SearchSelect({
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
   const listRef = useRef(null)
+  const triggerRef = useRef(null)
   const listId = useId()
+
+  /**
+   * Inside a drawer, the list has to be portalled into the drawer itself. The
+   * drawer locks scrolling on everything outside it (react-remove-scroll), and
+   * the default portal target is <body> — where the mouse wheel is swallowed
+   * and the list cannot be scrolled.
+   */
+  const [portalContainer, setPortalContainer] = useState(undefined)
 
   const selected = options.find((o) => o.value === value)
   const filtered = useMemo(() => {
@@ -58,11 +67,13 @@ export function SearchSelect({
         if (next) {
           setQuery('')
           setHighlight(Math.max(0, options.findIndex((o) => o.value === value)))
+          setPortalContainer(triggerRef.current?.closest('[role=dialog]') ?? undefined)
         }
       }}
     >
       <div className={cn('relative', className)}>
         <Popover.Trigger
+          ref={triggerRef}
           id={id}
           type="button"
           aria-label={ariaLabel}
@@ -95,7 +106,7 @@ export function SearchSelect({
         )}
       </div>
 
-      <Popover.Portal>
+      <Popover.Portal container={portalContainer}>
         <Popover.Content
           align="start"
           sideOffset={6}

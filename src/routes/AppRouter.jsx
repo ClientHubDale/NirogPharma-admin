@@ -23,6 +23,7 @@ const PriceLists = lazy(() => import('@/components/Inventory/PriceLists/PriceLis
 const Customers = lazy(() => import('@/components/Parties/Customers/Customers'))
 const Suppliers = lazy(() => import('@/components/Parties/Suppliers/Suppliers'))
 const Visited = lazy(() => import('@/components/Parties/Visited/Visited'))
+const Distributors = lazy(() => import('@/components/Parties/Distributors/Distributors'))
 const Estimates = lazy(() => import('@/components/Sales/Estimates/Estimates'))
 const SalesOrders = lazy(() => import('@/components/Sales/SalesOrders/SalesOrders'))
 const SalesInvoices = lazy(() => import('@/components/Sales/SalesInvoices/SalesInvoices'))
@@ -66,6 +67,7 @@ const BUILT = {
   '/admin/parties/customers': Customers,
   '/admin/parties/suppliers': Suppliers,
   '/admin/parties/visited': Visited,
+  '/admin/parties/distributors': Distributors,
   '/admin/sales/estimates': Estimates,
   '/admin/sales/orders': SalesOrders,
   '/admin/sales/invoices': SalesInvoices,

@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { Popover } from 'radix-ui'
 import { Label } from '@/components/ui/label'
@@ -12,7 +12,15 @@ export function MultiSelect({ id, label, required, value, onChange, options, pla
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
+  const triggerRef = useRef(null)
   const listId = useId()
+
+  /**
+   * Inside a drawer the list must be portalled into the drawer: the drawer
+   * locks scrolling outside itself, so a list left on <body> cannot be
+   * scrolled with the wheel.
+   */
+  const [portalContainer, setPortalContainer] = useState(undefined)
   const errorId = error ? `${id}-error` : undefined
 
   const selected = value.map((v) => options.find((o) => o.value === v)).filter(Boolean)
@@ -37,12 +45,14 @@ export function MultiSelect({ id, label, required, value, onChange, options, pla
         onOpenChange={(next) => {
           setOpen(next)
           if (next) {
+            setPortalContainer(triggerRef.current?.closest('[role=dialog]') ?? undefined)
             setQuery('')
             setHighlight(0)
           }
         }}
       >
         <Popover.Trigger
+          ref={triggerRef}
           id={id}
           type="button"
           aria-invalid={Boolean(error) || undefined}
@@ -84,7 +94,7 @@ export function MultiSelect({ id, label, required, value, onChange, options, pla
           <ChevronDown className={cn('size-4 shrink-0 text-ink-muted transition-transform', open && 'rotate-180')} />
         </Popover.Trigger>
 
-        <Popover.Portal>
+        <Popover.Portal container={portalContainer}>
           <Popover.Content
             align="start"
             sideOffset={6}
