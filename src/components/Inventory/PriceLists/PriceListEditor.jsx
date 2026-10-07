@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useItems } from '@/hooks/useItems'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Tabs } from '@/components/common/Tabs'
 import { Notice } from '@/components/data/Notice'
@@ -24,7 +25,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
 import { PARTY_GROUPS } from '@/mocks/parties'
-import { selectItems } from '@/store/itemsSlice'
 import { priceListSaved, selectPriceLists } from '@/store/priceListsSlice'
 
 const BASE = '/admin/inventory/price-lists'
@@ -43,7 +43,7 @@ function PriceListEditorForm({ priceListId, state }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const priceLists = useSelector(selectPriceLists)
-  const items = useSelector(selectItems)
+  const items = useItems()
   const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items])
 
   const [form, setForm] = useState(() => initialForm(priceLists, priceListId, state?.duplicateOf))

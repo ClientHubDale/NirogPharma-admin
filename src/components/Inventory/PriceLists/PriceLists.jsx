@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Tags } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useItems } from '@/hooks/useItems'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DataTable } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
@@ -12,7 +13,6 @@ import { PRICE_SHEET_COLUMNS, PRICE_SHEET_INSTRUCTIONS, priceSheetRows } from '@
 import { buildPriceListColumns } from '@/components/Inventory/PriceLists/components/PriceListsTable'
 import { Button } from '@/components/ui/button'
 import { buildWorkbook, downloadWorkbook } from '@/lib/xlsx'
-import { selectItems } from '@/store/itemsSlice'
 import { priceListDeleted, priceListRestored, selectPriceLists } from '@/store/priceListsSlice'
 
 const BASE = '/admin/inventory/price-lists'
@@ -27,7 +27,7 @@ export default function PriceLists() {
   const navigate = useNavigate()
   const location = useLocation()
   const priceLists = useSelector(selectPriceLists)
-  const items = useSelector(selectItems)
+  const items = useItems()
 
   const [search, setSearch] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })

@@ -4,6 +4,7 @@ import { LocationField } from '@/components/form/LocationField'
 import { SelectField } from '@/components/form/SelectField'
 import { TextAreaField } from '@/components/form/TextAreaField'
 import { TextField } from '@/components/form/TextField'
+import { PRICE_TIER_OPTIONS } from '@/constants/priceTiers'
 import { DISTRIBUTOR_STATUSES, WEEK_DAYS } from '../../distributorModel'
 
 /**
@@ -190,7 +191,17 @@ export function DistributorForm({ form, errors, onChange, managers, executives, 
         />
       </FormSection>
 
-      <FormSection title="Trade Terms" description="The credit they get and what they are expected to sell.">
+      <FormSection title="Trade Terms" description="The rate they buy on, the credit they get and what they are expected to sell.">
+        <SelectField
+          id="dist-price-tier"
+          label="Price tier"
+          required
+          searchable={false}
+          options={PRICE_TIER_OPTIONS}
+          value={form.priceTier}
+          onChange={(v) => onChange('priceTier', v)}
+          error={errors.priceTier}
+        />
         <TextField
           id="dist-credit-limit"
           label="Credit limit"

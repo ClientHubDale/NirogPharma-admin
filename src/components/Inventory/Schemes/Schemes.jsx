@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, TicketPercent } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useItems } from '@/hooks/useItems'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ColumnSettings } from '@/components/data/ColumnSettings'
 import { DataTable } from '@/components/data/DataTable'
@@ -13,7 +14,6 @@ import { SearchSelect } from '@/components/form/SearchSelect'
 import { SCHEME_STATUS_OPTIONS, SCHEME_TYPE_OPTIONS } from '@/components/Inventory/Schemes/schemeModel'
 import { buildSchemeColumns, SCHEME_COLUMN_OPTIONS } from '@/components/Inventory/Schemes/components/SchemesTable'
 import { Button } from '@/components/ui/button'
-import { selectItems } from '@/store/itemsSlice'
 import {
   schemeDeleted,
   schemeRestored,
@@ -30,7 +30,7 @@ export default function Schemes() {
   const navigate = useNavigate()
   const location = useLocation()
   const schemes = useSelector(selectSchemes)
-  const items = useSelector(selectItems)
+  const items = useItems()
   const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items])
 
   const [search, setSearch] = useState('')

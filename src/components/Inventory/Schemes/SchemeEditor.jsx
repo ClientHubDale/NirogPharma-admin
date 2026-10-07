@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useItems } from '@/hooks/useItems'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ChoiceCards } from '@/components/form/ChoiceCards'
 import { DateRangeField } from '@/components/form/DateRangeField'
@@ -22,7 +23,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { formatPrice } from '@/lib/format'
 import { PARTY_GROUPS } from '@/mocks/parties'
-import { selectItems } from '@/store/itemsSlice'
 import { schemeSaved, selectSchemes } from '@/store/schemesSlice'
 
 const BASE = '/admin/inventory/schemes'
@@ -59,7 +59,7 @@ function SchemeEditorForm({ schemeId, state }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const schemes = useSelector(selectSchemes)
-  const items = useSelector(selectItems)
+  const items = useItems()
 
   const [form, setForm] = useState(() => initialForm(schemes, schemeId, state?.duplicateOf))
   const [errors, setErrors] = useState({})

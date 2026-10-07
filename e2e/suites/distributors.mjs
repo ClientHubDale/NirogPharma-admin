@@ -180,6 +180,16 @@ await page.type('#dist-credit-limit', '250000')
 await page.type('#dist-credit-days', '30')
 await page.type('#dist-target', '500000')
 
+// The rate column this firm buys on.
+await page.click('#dist-price-tier')
+await page.waitForSelector('[role=listbox]')
+await sleep(300)
+const tiers = await page.$$eval('[role=option]', (os) => os.map((o) => o.innerText.split('\n')[0].trim()))
+eq('the price tier offers the four rate columns', tiers.join(' | '), 'Default — full MRP | −50% −12% | −50% −15% | −45% −10%')
+await page.keyboard.press('Escape')
+await sleep(200)
+await pickOption(page, '#dist-price-tier', '−50% −12%')
+
 /* ── region → city → area narrows as you go ───────────────────────────── */
 
 await pickOption(page, '#dist-region', 'Uttar Pradesh')
@@ -258,6 +268,8 @@ eq('the API agrees about the manager', stored.managerId, managerId)
 eq('and about the executive', stored.executiveIds.join(), execId)
 eq('the target was saved', stored.target, 500000)
 eq('the weekly off was saved', stored.weeklyOff, 'SUNDAY')
+eq('the price tier was saved', stored.priceTier, 'D50_12')
+has('and shows in the table', row[columnOf('Price Tier')], '−50% −12%')
 eq('the second number was saved', stored.altMobile, '6900000064')
 eq('the captured latitude was saved', stored.latitude, 28.9845)
 eq('and the longitude', stored.longitude, 77.7064)

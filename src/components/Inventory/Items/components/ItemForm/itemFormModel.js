@@ -30,6 +30,9 @@ export const emptyItemForm = (defaults = {}) => ({
   erpId: '',
   warehouseId: '',
   weight: '',
+  // What this item costs on each of the client's rate columns.
+  flatTierPricing: false,
+  tierPrices: {}, // { [tier]: { price: string, isCustom: boolean } }
   ...defaults,
 })
 
@@ -38,6 +41,10 @@ const str = (v) => (v === null || v === undefined || v === 0 ? (v === 0 ? '0' : 
 export const itemToForm = (item) => ({
   ...emptyItemForm(),
   ...item,
+  flatTierPricing: item.flatTierPricing ?? false,
+  tierPrices: Object.fromEntries(
+    (item.tierPrices ?? []).map((row) => [row.tier, { price: str(row.price), isCustom: row.isCustom }]),
+  ),
   sellPrice: str(item.sellPrice),
   mrp: str(item.mrp),
   purchasePrice: str(item.purchasePrice),

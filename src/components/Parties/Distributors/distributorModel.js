@@ -4,6 +4,7 @@
  * it (admin → manager → distributor → executive).
  */
 import { GSTIN_PATTERN } from '@/components/Parties/shared/partyModel'
+import { DEFAULT_PRICE_TIER } from '@/constants/priceTiers'
 
 export const WEEK_DAYS = [
   { value: 'SUNDAY', label: 'Sunday' },
@@ -43,6 +44,7 @@ export const emptyDistributorForm = () => ({
   transport: '',
   weeklyOff: '',
   target: '',
+  priceTier: DEFAULT_PRICE_TIER,
   status: 'ACTIVE',
   executiveId: '',
   shopPhoto: [],

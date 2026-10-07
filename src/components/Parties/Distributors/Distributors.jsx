@@ -14,6 +14,7 @@ import { StatusPill } from '@/components/data/StatusPill'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { Switch } from '@/components/form/Switch'
 import { Button } from '@/components/ui/button'
+import { PRICE_TIER_LABEL } from '@/constants/priceTiers'
 import { googleMapsUrl } from '@/lib/geo'
 import { formatINR } from '@/lib/format'
 import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
@@ -237,6 +238,10 @@ export default function Distributors() {
                 <span className="truncate">{getValue()}</span>
               </a>
             ),
+        }),
+        helper.accessor('priceTier', {
+          header: 'Price Tier',
+          cell: (i) => <StatusPill tone="info">{PRICE_TIER_LABEL[i.getValue()] ?? '—'}</StatusPill>,
         }),
         helper.accessor('weeklyOff', {
           header: 'Weekly Off',

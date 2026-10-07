@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { FileDown, FileUp, PackageSearch, Plus } from 'lucide-react'
 import { ColumnSettings } from '@/components/data/ColumnSettings'
@@ -7,11 +7,12 @@ import { EmptyState } from '@/components/data/EmptyState'
 import { FormDrawer } from '@/components/data/FormDrawer'
 import { ImportDialog } from '@/components/data/ImportDialog'
 import { Notice } from '@/components/data/Notice'
+import { useToast } from '@/components/common/Toast'
 import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { SearchSelect } from '@/components/form/SearchSelect'
-import { emptyItemForm, formToItem, ItemForm, itemToForm, validateItemForm } from '@/components/Inventory/Items/components/ItemForm'
+import { emptyItemForm, ItemForm, itemToForm, validateItemForm } from '@/components/Inventory/Items/components/ItemForm'
 import {
   ITEM_IMPORT_REQUIRED,
   ITEM_SAMPLE_ROWS,
@@ -29,7 +30,16 @@ import { Button } from '@/components/ui/button'
 import { parseCSV } from '@/lib/csv'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
 import { INITIAL_BRANDS, INITIAL_CATEGORIES, ITEM_STATUSES, WAREHOUSES } from '@/mocks/items'
-import { selectItems, setItems as setItemsAction } from '@/store/itemsSlice'
+import {
+  fetchItems,
+  importItems as importItemsThunk,
+  removeItem,
+  saveItem,
+  selectItems,
+  selectItemsError,
+  selectItemsStatus,
+  setItemStatus,
+} from '@/store/itemsSlice'
 
 const PAGE_SIZE = 10
 
@@ -54,8 +64,10 @@ const getRowId = (item) => item.id
 export default function Items() {
   // Catalogue lives in Redux so other screens (schemes, orders) see the same items.
   const dispatch = useDispatch()
+  const toast = useToast()
   const items = useSelector(selectItems)
-  const setItems = (updater) => dispatch(setItemsAction(updater))
+  const loadStatus = useSelector(selectItemsStatus)
+  const loadError = useSelector(selectItemsError)
   const [categories, setCategories] = useState(INITIAL_CATEGORIES)
   const [brands, setBrands] = useState(INITIAL_BRANDS)
 
@@ -110,6 +122,10 @@ export default function Items() {
     setDrawer({ open: true, editingId: item.id })
   }
 
+  useEffect(() => {
+    dispatch(fetchItems())
+  }, [dispatch])
+
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
     if (errors[field]) setErrors((current) => ({ ...current, [field]: undefined }))
@@ -125,41 +141,50 @@ export default function Items() {
     }
 
     setSaving(true)
-    await new Promise((resolve) => setTimeout(resolve, 400)) // mock network
-    const id = drawer.editingId ?? `itm-${Date.now()}`
-    const saved = formToItem(form, id)
-    setItems((current) => (drawer.editingId ? current.map((i) => (i.id === id ? saved : i)) : [saved, ...current]))
+    const result = await dispatch(saveItem({ id: drawer.editingId, form }))
     setSaving(false)
+
+    if (saveItem.rejected.match(result)) {
+      // The server checks the same things again and knows about clashes this
+      // browser cannot see — show its message and its per-field errors.
+      const { message, details } = result.payload
+      if (details) setErrors((current) => ({ ...current, ...details }))
+      return toast({ tone: 'danger', title: drawer.editingId ? 'Could not save' : 'Could not create', description: message })
+    }
+
+    const { item: saved, warning } = result.payload
     setDrawer({ open: false, editingId: null })
-    setHighlightId(id)
+    setHighlightId(saved.id)
     if (!drawer.editingId) {
       setSearch('')
       setStatus('')
       setWarehouse('')
       resetPage()
     }
-    setNotice({ tone: 'success', message: `${saved.name} ${drawer.editingId ? 'updated' : 'created'}.` })
+    toast({
+      tone: warning ? 'warning' : 'success',
+      title: `Item ${drawer.editingId ? 'updated' : 'created'}`,
+      description: warning ? `${saved.name} · ${warning}` : saved.name,
+    })
   }
 
   /* ── row actions ──────────────────────────────────────── */
 
-  const toggleStatus = (item) => {
+  const toggleStatus = async (item) => {
     const next = item.status === 'ACTIVE' ? 'DRAFT' : 'ACTIVE'
-    setItems((current) => current.map((i) => (i.id === item.id ? { ...i, status: next } : i)))
-    setNotice({ tone: 'success', message: `${item.name} moved to ${next === 'ACTIVE' ? 'Active' : 'Draft'}.` })
+    const result = await dispatch(setItemStatus({ id: item.id, status: next }))
+    if (setItemStatus.rejected.match(result)) {
+      return toast({ tone: 'danger', title: 'Could not change the status', description: result.payload.message })
+    }
+    toast({ title: `Moved to ${next === 'ACTIVE' ? 'Active' : 'Draft'}`, description: item.name })
   }
 
-  const remove = (item) => {
-    const index = items.findIndex((i) => i.id === item.id)
-    setItems((current) => current.filter((i) => i.id !== item.id))
-    setNotice({
-      tone: 'success',
-      message: `${item.name} deleted.`,
-      undo: () => {
-        setItems((current) => [...current.slice(0, index), item, ...current.slice(index)])
-        setNotice({ tone: 'success', message: `${item.name} restored.` })
-      },
-    })
+  const remove = async (item) => {
+    const result = await dispatch(removeItem({ id: item.id }))
+    if (removeItem.rejected.match(result)) {
+      return toast({ tone: 'danger', title: 'Could not delete', description: result.payload.message })
+    }
+    toast({ title: 'Item deleted', description: item.name })
   }
 
   // Handlers are stable-enough closures over state; rebuild columns when they change.
@@ -176,7 +201,7 @@ export default function Items() {
   const exportItems = async () => {
     const workbook = await buildWorkbook({ sheetName: 'Items', columns: ITEM_SHEET_COLUMNS, rows: itemsToSheetRows(filtered) })
     await downloadWorkbook(`nirog-items-${today()}.xlsx`, workbook)
-    setNotice({ tone: 'success', message: `Exported ${filtered.length} item${filtered.length === 1 ? '' : 's'} to Excel.` })
+    toast({ title: 'Export ready', description: `${filtered.length} item${filtered.length === 1 ? '' : 's'} downloaded` })
   }
 
   const downloadSample = async () => {
@@ -200,13 +225,23 @@ export default function Items() {
     }
     if (rows.length === 0) throw new Error('The file has no rows under the header. Use Download Sample for the format.')
 
-    const { items: added, skipped } = rowsToItems(rows, items)
+    // Shape and check the rows here, then let the API have the final word —
+    // it alone knows which codes are already taken.
+    const { items: candidates, skipped: localSkips } = rowsToItems(rows, items)
+    if (candidates.length === 0) {
+      const why = localSkips.slice(0, 5).map((s) => `Line ${s.line}: ${s.reason}`)
+      throw new Error(`No items imported. ${why.join(' · ')}${localSkips.length > 5 ? ` · …and ${localSkips.length - 5} more` : ''}`)
+    }
+
+    const result = await dispatch(importItemsThunk({ items: candidates }))
+    if (importItemsThunk.rejected.match(result)) throw new Error(result.payload.message)
+
+    const { added, skipped: serverSkips } = result.payload
+    const skipped = [...localSkips, ...serverSkips]
     const reasons = skipped.slice(0, 5).map((s) => `Line ${s.line}: ${s.reason}`)
     if (added.length === 0) {
       throw new Error(`No items imported. ${reasons.join(' · ')}${skipped.length > 5 ? ` · …and ${skipped.length - 5} more` : ''}`)
     }
-
-    setItems((current) => [...added, ...current])
     // New categories / brands from the file become selectable in the form.
     const addNew = (list, values) => [...list, ...[...new Set(values)].filter((v) => v && !list.some((x) => x.toLowerCase() === v.toLowerCase()))]
     setCategories((list) => addNew(list, added.map((i) => i.category)))
@@ -280,6 +315,15 @@ export default function Items() {
         </Button>
       </PageHeader>
 
+      {loadStatus === 'failed' && (
+        <Notice tone="danger">
+          {loadError?.message ?? 'Could not load items.'}
+          <button type="button" onClick={() => dispatch(fetchItems())} className="ml-2 font-semibold underline underline-offset-4">
+            Try again
+          </button>
+        </Notice>
+      )}
+
       {notice && (
         <Notice tone={notice.tone} onDismiss={() => setNotice(null)}>
           {notice.message}
@@ -335,18 +379,24 @@ export default function Items() {
           />
         </div>
 
-        <DataTable
-          data={filtered}
-          columns={columns}
-          getRowId={getRowId}
-          pagination={page}
-          onPaginationChange={setPagination}
-          columnVisibility={columnVisibility}
-          onColumnVisibilityChange={setColumnVisibility}
-          onRowClick={openEdit}
-          highlightRowId={highlightId}
-          empty={empty}
-        />
+        {loadStatus === 'loading' && !items.length ? (
+          <div className="grid min-h-60 place-items-center" role="status" aria-label="Loading items">
+            <span className="size-8 animate-spin rounded-full border-3 border-mint border-t-green-deep" />
+          </div>
+        ) : (
+          <DataTable
+            data={filtered}
+            columns={columns}
+            getRowId={getRowId}
+            pagination={page}
+            onPaginationChange={setPagination}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+            onRowClick={openEdit}
+            highlightRowId={highlightId}
+            empty={empty}
+          />
+        )}
       </section>
 
       <ImportDialog

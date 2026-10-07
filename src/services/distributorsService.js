@@ -25,6 +25,7 @@ const FIELDS = [
   'transport',
   'weeklyOff',
   'target',
+  'priceTier',
   'status',
 ]
 

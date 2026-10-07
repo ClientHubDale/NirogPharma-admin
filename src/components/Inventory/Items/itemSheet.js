@@ -4,6 +4,7 @@
  * files from their previous system import as-is; Warehouse and Status are
  * our additions at the end (optional).
  */
+import { PRICE_TIERS } from '@/constants/priceTiers'
 import { GST_RATES, UNITS, WAREHOUSES } from '@/mocks/items'
 
 const UNIT_CODES = UNITS.map((u) => u.value)
@@ -30,6 +31,16 @@ export const ITEM_SHEET_COLUMNS = [
   { key: 'erpId', header: 'Erp ID', width: 12, note: 'ID of this item in your accounting / ERP software.' },
   { key: 'warehouse', header: 'Warehouse', width: 34, list: WAREHOUSES.map((w) => w.label), note: 'Where the opening stock is kept. Default: main warehouse.' },
   { key: 'status', header: 'Status', width: 10, list: ['Active', 'Draft'], note: 'Active (default) or Draft.' },
+  // One column per rate column. Leave a cell empty and the price follows the
+  // formula (MRP × the tier's multiplier); put a number in and that price is
+  // this item's own on that tier.
+  ...PRICE_TIERS.map(({ value, label, hint }) => ({
+    key: `tier_${value}`,
+    header: `Price ${label}`,
+    width: 20,
+    numFmt: '0.00',
+    note: `Leave blank to use ${hint}. A number here is a custom price.`,
+  })),
 ]
 
 /** Header (lower-cased) → field key, including headers from our earlier CSV format. */
@@ -90,6 +101,14 @@ export function itemsToSheetRows(items) {
     openingStockDate: item.openingStockDate ? new Date(item.openingStockDate) : '',
     warehouse: WAREHOUSES.find((w) => w.value === item.warehouseId)?.label ?? '',
     status: item.status === 'ACTIVE' ? 'Active' : 'Draft',
+    // Only the item's own prices go out; a formula price is left blank so the
+    // file round-trips without turning every row into a custom price.
+    ...Object.fromEntries(
+      PRICE_TIERS.map(({ value }) => {
+        const row = (item.tierPrices ?? []).find((t) => t.tier === value)
+        return [`tier_${value}`, row?.isCustom ? row.price : '']
+      }),
+    ),
   }))
 }
 
@@ -211,6 +230,10 @@ export function rowsToItems(rawRows, existing) {
       description: '',
       images: [],
       status: String(row.status ?? '').trim().toLowerCase() === 'draft' ? 'DRAFT' : 'ACTIVE',
+      // A filled tier cell is a custom price; the blanks are worked out from MRP.
+      tierPrices: PRICE_TIERS.map(({ value }) => ({ tier: value, price: toNumber(row[`tier_${value}`]), isCustom: true })).filter(
+        (t) => t.price !== null && t.price > 0,
+      ),
       updatedAt: new Date().toISOString().slice(0, 10),
     })
   })

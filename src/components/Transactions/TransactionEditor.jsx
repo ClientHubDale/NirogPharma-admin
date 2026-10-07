@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Gift, Loader2 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useItems } from '@/hooks/useItems'
+import { itemAdded } from '@/store/itemsSlice'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { FormDrawer } from '@/components/data/FormDrawer'
 import { DocumentUploader } from '@/components/form/DocumentUploader'
@@ -13,7 +15,6 @@ import { Button } from '@/components/ui/button'
 import { formatPrice } from '@/lib/format'
 import { INITIAL_BRANDS, INITIAL_CATEGORIES, WAREHOUSES } from '@/mocks/items'
 import { routeAdded, selectCities, selectRoutes } from '@/store/geographySlice'
-import { selectItems, setItems } from '@/store/itemsSlice'
 import { partySaved, selectParties } from '@/store/partiesSlice'
 import { selectPriceLists } from '@/store/priceListsSlice'
 import { docPatched, docSaved, selectDocSettings, selectDocs } from '@/store/transactionsSlice'
@@ -60,7 +61,7 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
   const settings = useSelector(selectDocSettings(type))
   const customers = useSelector(selectParties('CUSTOMER'))
   const suppliers = useSelector(selectParties('SUPPLIER'))
-  const items = useSelector(selectItems)
+  const items = useItems()
   const priceLists = useSelector(selectPriceLists)
   const schemes = useSelector(selectSchemes)
   const routes = useSelector(selectRoutes)
@@ -210,7 +211,7 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
     const found = validateItemForm(itemDrawer.form, { items, editingId: null })
     if (Object.keys(found).some((k) => found[k])) return setItemDrawer((d) => ({ ...d, errors: found }))
     const item = formToItem(itemDrawer.form, `itm-${Date.now()}`)
-    dispatch(setItems((list) => [item, ...list]))
+    dispatch(itemAdded(item))
     setItemDrawer(null)
     setLines([...doc.lines, lineFor(item, party, priceLists, newKey(), purchase)])
   }

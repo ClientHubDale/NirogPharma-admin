@@ -8,6 +8,7 @@ import { SelectField } from '@/components/form/SelectField'
 import { Switch } from '@/components/form/Switch'
 import { TextAreaField } from '@/components/form/TextAreaField'
 import { TextField } from '@/components/form/TextField'
+import { TierPrices } from './TierPrices'
 import { CESS_RATES, DISCOUNT_TYPES, GST_RATES, TAX_MODES, UNITS, WAREHOUSES } from '@/mocks/items'
 
 const NUMERIC = { inputMode: 'decimal', autoComplete: 'off' }
@@ -200,6 +201,14 @@ export function ItemForm({ form, errors, onChange, categories, brands, onAddCate
           onChange={setNumber('mrp')}
           error={errors.mrp}
         />
+        <TierPrices
+          mrp={form.mrp}
+          flat={form.flatTierPricing}
+          tierPrices={form.tierPrices}
+          onChange={(next) => onChange('tierPrices', next)}
+          onFlatChange={(on) => onChange('flatTierPricing', on)}
+        />
+
         <TextField
           id="item-purchase-price"
           label="Purchase price"
