@@ -79,12 +79,13 @@ export default function DistributorStocks() {
 
   const columns = useMemo(() => buildHoldingColumns({ onReturn: (row) => openReturn(row) }), [])
 
-  const openReturn = (row) =>
-    setReturning({
-      form: emptyMoveForm({ distributorId: row.distributorId, batchId: row.batchId }),
-      errors: {},
-      row,
-    })
+  // Save only lights up once there is something to save.
+  const changed = returning && JSON.stringify(returning.form) !== JSON.stringify(returning.initial)
+
+  const openReturn = (row) => {
+    const form = emptyMoveForm({ distributorId: row.distributorId, batchId: row.batchId })
+    setReturning({ form, initial: form, errors: {}, row })
+  }
 
   const setField = (field, value) =>
     setReturning((state) => ({ ...state, form: { ...state.form, [field]: value }, errors: { ...state.errors, [field]: undefined } }))
@@ -223,6 +224,8 @@ export default function DistributorStocks() {
         description={returning ? `${returning.row.distributorName} · ${returning.row.batchNo}` : ''}
         onSubmit={confirmReturn}
         saving={saving}
+        saveDisabled={!changed}
+        saveHint="Enter how much is coming back first"
         saveLabel="Record return"
       >
         {returning && (

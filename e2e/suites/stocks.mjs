@@ -63,10 +63,15 @@ await clickText(page, 'button', 'New', { exact: false })
 await page.waitForSelector('#batch-no')
 await sleep(500)
 
+// Nothing typed yet, so there is nothing to save.
+const saveButton = () => page.$eval('footer button[type=submit], header button[type=submit]', (el) => el.disabled)
+ok('Save is dark on an empty batch form', await saveButton())
+
 await pickOption(page, '#batch-item', ITEM.name)
 await sleep(300)
 await page.type('#batch-no', BATCH)
 await page.type('#batch-quantity', '500')
+ok('and lights up once the batch is filled in', !(await saveButton()))
 has('the quantity is counted in the item\'s unit', await page.$eval('#batch-quantity', (el) => el.parentElement.textContent), 'BTL')
 
 // Received last month, so this month's figures open at 500 rather than take it in.

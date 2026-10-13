@@ -84,6 +84,10 @@ export default function FactoryStocks() {
 
   const resetPage = () => setPagination((p) => ({ ...p, pageIndex: 0 }))
 
+  // Nothing typed yet, nothing to save: the button stays dark until the form
+  // differs from the one that opened.
+  const changed = (state) => Boolean(state) && JSON.stringify(state.form) !== JSON.stringify(state.initial)
+
   // The period is part of the request: the server works the four figures out.
   const load = () => dispatch(fetchBatches({ from: period.from, to: period.to }))
 
@@ -180,7 +184,10 @@ export default function FactoryStocks() {
 
   /* ── issuing to a distributor ─────────────────────────── */
 
-  const openIssue = (batch) => setIssuing({ form: emptyMoveForm({ batchId: batch.id }), errors: {}, batch })
+  const openIssue = (batch) => {
+    const form = emptyMoveForm({ batchId: batch.id })
+    setIssuing({ form, initial: form, errors: {}, batch })
+  }
 
   const issueField = (field, value) =>
     setIssuing((state) => ({ ...state, form: { ...state.form, [field]: value }, errors: { ...state.errors, [field]: undefined } }))
@@ -354,6 +361,8 @@ export default function FactoryStocks() {
         description={drawer?.editingId ? `${drawer.batch?.itemName} · ${drawer.batch?.batchNo}` : 'Fields marked * are required.'}
         onSubmit={save}
         saving={saving}
+        saveDisabled={!changed(drawer)}
+        saveHint={drawer?.editingId ? 'Change something first' : 'Fill the batch in first'}
         saveLabel={drawer?.editingId ? 'Save changes' : 'Save'}
       >
         {drawer && <BatchForm form={drawer.form} errors={drawer.errors} items={items} onChange={updateField} editing={drawer.batch} />}
@@ -366,6 +375,8 @@ export default function FactoryStocks() {
         description={issuing ? `${issuing.batch.itemName} · ${issuing.batch.batchNo}` : ''}
         onSubmit={confirmIssue}
         saving={saving}
+        saveDisabled={!changed(issuing)}
+        saveHint="Choose a distributor and a quantity first"
         saveLabel="Issue"
       >
         {issuing && (
