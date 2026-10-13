@@ -19,18 +19,6 @@ export const UNITS = [
   { value: 'JAR', label: 'JAR — Jar' },
 ]
 
-export const GST_RATES = [0, 5, 12, 18, 28].map((rate) => ({ value: String(rate), label: `${rate}%` }))
-export const CESS_RATES = [0, 1, 3, 5].map((rate) => ({ value: String(rate), label: `${rate}%` }))
-
-export const TAX_MODES = [
-  { value: 'EXCL', label: 'Excl. tax' },
-  { value: 'INCL', label: 'Incl. tax' },
-]
-
-export const DISCOUNT_TYPES = [
-  { value: 'AMOUNT', label: 'Amount' },
-  { value: 'PERCENT', label: '%' },
-]
 
 export const ITEM_STATUSES = [
   { value: 'ACTIVE', label: 'Active' },
@@ -38,7 +26,43 @@ export const ITEM_STATUSES = [
 ]
 
 export const INITIAL_CATEGORIES = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Powder', 'Ayurvedic']
-export const INITIAL_BRANDS = ['Nirog', 'Nirog Ayurveda', 'Nirog Care', 'Nirog Kids']
+
+/**
+ * What a pack's quantity is counted in, by category: syrups and oils in ml,
+ * capsules and tablets by the piece, powders and pastes in grams. A category
+ * that isn't listed shows no unit — add it here rather than anywhere else.
+ */
+export const CATEGORY_QUANTITY_UNITS = {
+  Syrup: 'ML',
+  Drops: 'ML',
+  Oil: 'ML',
+  Injection: 'ML',
+  Capsule: 'CAP',
+  Tablet: 'TAB',
+  Powder: 'G',
+  Churan: 'G',
+  Granules: 'G',
+  Food: 'G',
+  Ointment: 'G',
+  Ayurvedic: 'G',
+}
+/** What the admin may count a new category in. */
+export const QUANTITY_UNITS = [
+  { value: 'ML', label: 'ML — millilitres' },
+  { value: 'L', label: 'L — litres' },
+  { value: 'G', label: 'G — grams' },
+  { value: 'KG', label: 'KG — kilograms' },
+  { value: 'CAP', label: 'CAP — capsules' },
+  { value: 'TAB', label: 'TAB — tablets' },
+  { value: 'PCS', label: 'PCS — pieces' },
+]
+
+/**
+ * The unit a category is counted in. `known` is the table rebuilt from the
+ * catalogue — categories the admin added themselves live there, and they win
+ * over the built-in list so a renamed unit sticks.
+ */
+export const quantityUnitFor = (category, known) => known?.[category] ?? CATEGORY_QUANTITY_UNITS[category] ?? ''
 
 /** Stock at or below this counts as low. */
 export const LOW_STOCK_THRESHOLD = 50

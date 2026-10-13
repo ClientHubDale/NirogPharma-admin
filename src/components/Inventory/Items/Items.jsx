@@ -16,7 +16,7 @@ import { emptyItemForm, ItemForm, itemToForm, validateItemForm } from '@/compone
 import {
   ITEM_IMPORT_REQUIRED,
   ITEM_SAMPLE_ROWS,
-  ITEM_SHEET_COLUMNS,
+  itemSheetColumns,
   ITEM_SHEET_INSTRUCTIONS,
   itemsToSheetRows,
   rowsToItems,
@@ -29,7 +29,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { parseCSV } from '@/lib/csv'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
-import { INITIAL_BRANDS, INITIAL_CATEGORIES, ITEM_STATUSES, WAREHOUSES } from '@/mocks/items'
+import { CATEGORY_QUANTITY_UNITS, INITIAL_CATEGORIES, ITEM_STATUSES, WAREHOUSES } from '@/mocks/items'
+import { usePriceTiers } from '@/hooks/usePriceTiers'
+import { addPriceTier, removePriceTier } from '@/store/priceTiersSlice'
+import { addGift as addGiftThunk } from '@/store/giftsSlice'
 import {
   fetchItems,
   importItems as importItemsThunk,
@@ -47,17 +50,9 @@ const PAGE_SIZE = 10
 const FIELD_IDS = {
   name: 'item-name',
   unit: 'item-unit',
-  sellPrice: 'item-sell-price',
-  code: 'item-code',
+  quantity: 'item-quantity',
   mrp: 'item-mrp',
-  purchasePrice: 'item-purchase-price',
   hsn: 'item-hsn',
-  discount: 'item-discount',
-  stock: 'item-stock',
-  warehouseId: 'item-warehouse',
-  openingStockDate: 'item-opening-stock-date',
-  secondaryUnit: 'item-secondary-unit',
-  conversionFactor: 'item-conversion',
 }
 const getRowId = (item) => item.id
 
@@ -68,8 +63,10 @@ export default function Items() {
   const items = useSelector(selectItems)
   const loadStatus = useSelector(selectItemsStatus)
   const loadError = useSelector(selectItemsError)
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES)
-  const [brands, setBrands] = useState(INITIAL_BRANDS)
+  const priceTiers = usePriceTiers()
+  // Categories the admin added this session, as { name: quantity unit }. There
+  // is no category table yet, so the rest is rebuilt from the catalogue below.
+  const [addedCategories, setAddedCategories] = useState({})
 
   // List controls.
   const [search, setSearch] = useState('')
@@ -111,7 +108,7 @@ export default function Items() {
   /* ── drawer ───────────────────────────────────────────── */
 
   const openCreate = () => {
-    setForm(emptyItemForm({ warehouseId: WAREHOUSES[0].value }))
+    setForm(emptyItemForm())
     setErrors({})
     setDrawer({ open: true, editingId: null })
   }
@@ -125,6 +122,23 @@ export default function Items() {
   useEffect(() => {
     dispatch(fetchItems())
   }, [dispatch])
+
+  /**
+   * Every category in play, and what each one's quantity is counted in: the
+   * built-in list, whatever the saved items use, then this session's additions.
+   * An item remembers the unit it was saved with, so a category invented last
+   * week still knows it is counted in ML today.
+   */
+  const categoryUnits = useMemo(() => {
+    const units = { ...CATEGORY_QUANTITY_UNITS }
+    for (const item of items) if (item.category && item.quantityUnit) units[item.category] = item.quantityUnit
+    return { ...units, ...addedCategories }
+  }, [items, addedCategories])
+
+  const categories = useMemo(() => {
+    const all = [...INITIAL_CATEGORIES, ...items.map((item) => item.category), ...Object.keys(addedCategories)]
+    return [...new Set(all.filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  }, [items, addedCategories])
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
@@ -141,7 +155,9 @@ export default function Items() {
     }
 
     setSaving(true)
-    const result = await dispatch(saveItem({ id: drawer.editingId, form }))
+    // An item saved before its category had a unit gets one now.
+    const payload = { ...form, quantityUnit: form.quantityUnit || categoryUnits[form.category] || '' }
+    const result = await dispatch(saveItem({ id: drawer.editingId, form: payload }))
     setSaving(false)
 
     if (saveItem.rejected.match(result)) {
@@ -166,6 +182,48 @@ export default function Items() {
       title: `Item ${drawer.editingId ? 'updated' : 'created'}`,
       description: warning ? `${saved.name} · ${warning}` : saved.name,
     })
+  }
+
+  /**
+   * A giveaway — a pen, a bag. It is not made in the factory, so it is kept out
+   * of the catalogue entirely and nothing is deducted from stock when one goes
+   * out. Returns the new giveaway, or the reason it could not be saved.
+   */
+  const addGift = async ({ name, unit }) => {
+    const result = await dispatch(addGiftThunk({ name, unit }))
+    if (addGiftThunk.rejected.match(result)) return result.payload.message
+    toast({ tone: 'success', title: 'Giveaway added', description: `${name} · not from stock` })
+    return result.payload.gift
+  }
+
+  /* ── rate columns ─────────────────────────────────────── */
+
+  /**
+   * A new rate column goes on every item at once, so the catalogue is reloaded
+   * to pick up the prices the server worked out. Returns the reason on failure,
+   * which the form shows beside the discounts.
+   */
+  const addTier = async ({ discounts, label }) => {
+    const result = await dispatch(addPriceTier({ discounts, label }))
+    if (addPriceTier.rejected.match(result)) return result.payload.message
+
+    const { tier, priced } = result.payload
+    dispatch(fetchItems())
+    toast({
+      tone: 'success',
+      title: 'Rate column added',
+      description: `${tier.label} · ${priced} item${priced === 1 ? '' : 's'} priced from their MRP`,
+    })
+    return null
+  }
+
+  const removeTier = async (tier) => {
+    const result = await dispatch(removePriceTier({ id: tier.id }))
+    if (removePriceTier.rejected.match(result)) {
+      return toast({ tone: 'danger', title: 'Could not remove', description: result.payload.message })
+    }
+    dispatch(fetchItems())
+    toast({ tone: 'success', title: 'Rate column removed', description: tier.label })
   }
 
   /* ── row actions ──────────────────────────────────────── */
@@ -199,7 +257,7 @@ export default function Items() {
   const today = () => new Date().toISOString().slice(0, 10)
 
   const exportItems = async () => {
-    const workbook = await buildWorkbook({ sheetName: 'Items', columns: ITEM_SHEET_COLUMNS, rows: itemsToSheetRows(filtered) })
+    const workbook = await buildWorkbook({ sheetName: 'Items', columns: itemSheetColumns(priceTiers), rows: itemsToSheetRows(filtered, priceTiers) })
     await downloadWorkbook(`nirog-items-${today()}.xlsx`, workbook)
     toast({ title: 'Export ready', description: `${filtered.length} item${filtered.length === 1 ? '' : 's'} downloaded` })
   }
@@ -207,7 +265,7 @@ export default function Items() {
   const downloadSample = async () => {
     const workbook = await buildWorkbook({
       sheetName: 'Items',
-      columns: ITEM_SHEET_COLUMNS,
+      columns: itemSheetColumns(priceTiers),
       rows: ITEM_SAMPLE_ROWS,
       blankRows: 48,
       instructions: ITEM_SHEET_INSTRUCTIONS,
@@ -227,7 +285,7 @@ export default function Items() {
 
     // Shape and check the rows here, then let the API have the final word —
     // it alone knows which codes are already taken.
-    const { items: candidates, skipped: localSkips } = rowsToItems(rows, items)
+    const { items: candidates, skipped: localSkips } = rowsToItems(rows, items, priceTiers)
     if (candidates.length === 0) {
       const why = localSkips.slice(0, 5).map((s) => `Line ${s.line}: ${s.reason}`)
       throw new Error(`No items imported. ${why.join(' · ')}${localSkips.length > 5 ? ` · …and ${localSkips.length - 5} more` : ''}`)
@@ -242,10 +300,7 @@ export default function Items() {
     if (added.length === 0) {
       throw new Error(`No items imported. ${reasons.join(' · ')}${skipped.length > 5 ? ` · …and ${skipped.length - 5} more` : ''}`)
     }
-    // New categories / brands from the file become selectable in the form.
-    const addNew = (list, values) => [...list, ...[...new Set(values)].filter((v) => v && !list.some((x) => x.toLowerCase() === v.toLowerCase()))]
-    setCategories((list) => addNew(list, added.map((i) => i.category)))
-    setBrands((list) => addNew(list, added.map((i) => i.brand)))
+    // Categories from the file are picked up from the items themselves.
     setSearch('')
     setStatus('')
     setWarehouse('')
@@ -412,7 +467,7 @@ export default function Items() {
         open={drawer.open}
         onOpenChange={(open) => !open && setDrawer({ open: false, editingId: null })}
         title={drawer.editingId ? 'Edit item' : 'Create item'}
-        description={drawer.editingId ? form.code || form.name : 'Fields marked * are required.'}
+        description={drawer.editingId ? form.name : 'Fields marked * are required.'}
         onSubmit={save}
         saving={saving}
         saveLabel={drawer.editingId ? 'Save changes' : 'Save'}
@@ -422,9 +477,12 @@ export default function Items() {
           errors={errors}
           onChange={updateField}
           categories={categories}
-          brands={brands}
-          onAddCategory={(name) => setCategories((c) => [...c, name])}
-          onAddBrand={(name) => setBrands((b) => [...b, name])}
+          categoryUnits={categoryUnits}
+          onAddCategory={(name, unit) => setAddedCategories((c) => ({ ...c, [name]: unit }))}
+          items={items}
+          onAddGift={addGift}
+          onAddTier={addTier}
+          onRemoveTier={removeTier}
           onImageError={(message) => setErrors((e) => ({ ...e, images: message }))}
         />
         {errors.images && <Notice tone="error">{errors.images}</Notice>}

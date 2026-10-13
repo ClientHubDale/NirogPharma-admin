@@ -20,6 +20,8 @@ const Items = lazy(() => import('@/components/Inventory/Items/Items'))
 const Schemes = lazy(() => import('@/components/Inventory/Schemes/Schemes'))
 const SchemeEditor = lazy(() => import('@/components/Inventory/Schemes/SchemeEditor'))
 const PriceLists = lazy(() => import('@/components/Inventory/PriceLists/PriceLists'))
+const FactoryStocks = lazy(() => import('@/components/Stocks/FactoryStocks/FactoryStocks'))
+const DistributorStocks = lazy(() => import('@/components/Stocks/DistributorStocks/DistributorStocks'))
 const Customers = lazy(() => import('@/components/Parties/Customers/Customers'))
 const Suppliers = lazy(() => import('@/components/Parties/Suppliers/Suppliers'))
 const Visited = lazy(() => import('@/components/Parties/Visited/Visited'))
@@ -64,6 +66,8 @@ const BUILT = {
   '/admin/inventory/items': Items,
   '/admin/inventory/schemes': Schemes,
   '/admin/inventory/price-lists': PriceLists,
+  '/admin/stocks/factory': FactoryStocks,
+  '/admin/stocks/distributor': DistributorStocks,
   '/admin/parties/customers': Customers,
   '/admin/parties/suppliers': Suppliers,
   '/admin/parties/visited': Visited,

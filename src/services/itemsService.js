@@ -4,32 +4,27 @@
  */
 import api from './api'
 
+// Stock, warehouse, units and weight are the stock module's: the item form
+// never sends them, so saving a product cannot overwrite what stock holds.
+// `code` is no longer on the form — it survives here so an item imported or
+// seeded with one keeps it through an edit.
 const FIELDS = [
   'name',
   'code',
   'category',
-  'brand',
   'unit',
+  'quantity',
+  'quantityUnit',
   'description',
   'status',
   'mrp',
-  'sellPrice',
-  'sellTaxMode',
-  'purchasePrice',
-  'purchaseTaxMode',
   'gst',
-  'cess',
   'hsn',
-  'discount',
-  'discountType',
   'offerText',
-  'stock',
-  'openingStockDate',
-  'secondaryUnit',
-  'conversionFactor',
-  'warehouseId',
-  'erpId',
-  'weight',
+  'schemeBuyQty',
+  'schemeFreeQty',
+  'schemeFreeItemId',
+  'schemeFreeGiftId',
   'flatTierPricing',
 ]
 

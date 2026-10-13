@@ -7,29 +7,19 @@ export const emptyItemForm = (defaults = {}) => ({
   name: '',
   status: 'ACTIVE',
   unit: '',
-  sellPrice: '',
-  sellTaxMode: 'EXCL',
-  code: '',
   description: '',
   category: '',
-  brand: '',
+  quantity: '',
+  quantityUnit: '',
   images: [],
   mrp: '',
-  purchasePrice: '',
-  purchaseTaxMode: 'EXCL',
   hsn: '',
   gst: '',
-  cess: '',
-  discount: '',
-  discountType: 'AMOUNT',
   offerText: '',
-  stock: '',
-  openingStockDate: '',
-  secondaryUnit: '',
-  conversionFactor: '',
-  erpId: '',
-  warehouseId: '',
-  weight: '',
+  schemeBuyQty: '',
+  schemeFreeQty: '',
+  schemeFreeItemId: '',
+  schemeFreeGiftId: '',
   // What this item costs on each of the client's rate columns.
   flatTierPricing: false,
   tierPrices: {}, // { [tier]: { price: string, isCustom: boolean } }
@@ -45,18 +35,14 @@ export const itemToForm = (item) => ({
   tierPrices: Object.fromEntries(
     (item.tierPrices ?? []).map((row) => [row.tier, { price: str(row.price), isCustom: row.isCustom }]),
   ),
-  sellPrice: str(item.sellPrice),
+  quantity: str(item.quantity),
+  schemeBuyQty: str(item.schemeBuyQty),
+  schemeFreeQty: str(item.schemeFreeQty),
+  schemeFreeItemId: item.schemeFreeItemId ?? '',
+  schemeFreeGiftId: item.schemeFreeGiftId ?? '',
+  quantityUnit: item.quantityUnit ?? '',
   mrp: str(item.mrp),
-  purchasePrice: str(item.purchasePrice),
   gst: str(item.gst),
-  cess: str(item.cess),
-  discount: item.discount ? String(item.discount) : '',
-  stock: str(item.stock),
-  weight: str(item.weight),
-  conversionFactor: str(item.conversionFactor),
-  openingStockDate: item.openingStockDate ?? '',
-  secondaryUnit: item.secondaryUnit ?? '',
-  erpId: item.erpId ?? '',
 })
 
 const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
@@ -65,20 +51,11 @@ export const formToItem = (form, id) => ({
   ...form,
   id,
   name: form.name.trim(),
-  code: form.code.trim(),
   description: form.description.trim(),
   offerText: form.offerText.trim(),
-  sellPrice: num(form.sellPrice),
+  quantity: num(form.quantity),
   mrp: num(form.mrp),
-  purchasePrice: num(form.purchasePrice),
   gst: num(form.gst) ?? 0,
-  cess: num(form.cess) ?? 0,
-  discount: num(form.discount) ?? 0,
-  stock: num(form.stock) ?? 0,
-  erpId: form.erpId.trim(),
-  secondaryUnit: form.secondaryUnit,
-  conversionFactor: form.secondaryUnit ? num(form.conversionFactor) : null,
-  weight: form.weight.trim?.() ?? form.weight,
   updatedAt: new Date().toISOString().slice(0, 10),
 })
 
@@ -88,7 +65,6 @@ const isNumber = (v) => v !== '' && !Number.isNaN(Number(v))
 export function validateItemForm(form, { items, editingId }) {
   const errors = {}
   const name = form.name.trim()
-  const code = form.code.trim()
 
   if (!name) errors.name = 'Item name is required.'
   else if (items.some((i) => i.id !== editingId && i.name.toLowerCase() === name.toLowerCase()))
@@ -96,44 +72,24 @@ export function validateItemForm(form, { items, editingId }) {
 
   if (!form.unit) errors.unit = 'Choose a unit.'
 
-  if (!form.sellPrice) errors.sellPrice = 'Sell price is required.'
-  else if (!isNumber(form.sellPrice) || Number(form.sellPrice) <= 0) errors.sellPrice = 'Enter a price above 0.'
+  if (form.quantity !== '' && (!isNumber(form.quantity) || Number(form.quantity) <= 0))
+    errors.quantity = 'Enter a quantity above 0.'
 
-  if (code && items.some((i) => i.id !== editingId && i.code?.toLowerCase() === code.toLowerCase()))
-    errors.code = 'This item code is already used.'
+  if (form.mrp !== '' && (!isNumber(form.mrp) || Number(form.mrp) <= 0)) errors.mrp = 'Enter a valid MRP.'
 
-  if (form.mrp !== '') {
-    if (!isNumber(form.mrp) || Number(form.mrp) <= 0) errors.mrp = 'Enter a valid MRP.'
-    else if (isNumber(form.sellPrice) && Number(form.sellPrice) > Number(form.mrp))
-      errors.mrp = 'MRP can’t be lower than the sell price.'
+  // A scheme is all three or none: how many to buy, how many are free, and of what.
+  const freeThing = form.schemeFreeItemId || form.schemeFreeGiftId
+  const scheme = [form.schemeBuyQty, form.schemeFreeQty, freeThing].filter((v) => String(v ?? '').trim() !== '')
+  if (scheme.length && scheme.length < 3) {
+    if (!form.schemeBuyQty) errors.schemeBuyQty = 'How many must they buy?'
+    if (!freeThing) errors.schemeFreeItemId = 'Choose the free item.'
+    if (!form.schemeFreeQty) errors.schemeFreeQty = 'How many are free?'
   }
 
-  if (form.purchasePrice !== '' && (!isNumber(form.purchasePrice) || Number(form.purchasePrice) < 0))
-    errors.purchasePrice = 'Enter a valid purchase price.'
+  if (form.gst !== '' && (!isNumber(form.gst) || Number(form.gst) < 0 || Number(form.gst) > 100))
+    errors.gst = 'Enter a percentage between 0 and 100.'
 
   if (form.hsn && !/^\d{4}(\d{2}){0,2}$/.test(form.hsn)) errors.hsn = 'HSN is 4, 6 or 8 digits.'
-
-  if (form.discount !== '') {
-    const d = Number(form.discount)
-    if (!isNumber(form.discount) || d < 0) errors.discount = 'Enter a valid discount.'
-    else if (form.discountType === 'PERCENT' && d > 100) errors.discount = 'A percentage can’t exceed 100.'
-    else if (form.discountType === 'AMOUNT' && isNumber(form.sellPrice) && d >= Number(form.sellPrice))
-      errors.discount = 'Discount must be less than the sell price.'
-  }
-
-  if (form.stock !== '' && (!Number.isInteger(Number(form.stock)) || Number(form.stock) < 0))
-    errors.stock = 'Stock must be a whole number, 0 or more.'
-  if (form.stock !== '' && Number(form.stock) > 0 && !form.warehouseId) errors.warehouseId = 'Choose where the stock is kept.'
-
-  if (form.secondaryUnit) {
-    if (form.secondaryUnit === form.unit) errors.secondaryUnit = 'Choose a different unit from the main one.'
-    const f = Number(form.conversionFactor)
-    if (!form.conversionFactor) errors.conversionFactor = 'How many are in one?'
-    else if (!Number.isInteger(f) || f < 2) errors.conversionFactor = 'Whole number, 2 or more.'
-  }
-
-  if (form.openingStockDate && form.openingStockDate > new Date().toISOString().slice(0, 10))
-    errors.openingStockDate = 'Can’t be in the future.'
 
   return errors
 }

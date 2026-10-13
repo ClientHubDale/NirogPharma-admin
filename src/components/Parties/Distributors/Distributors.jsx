@@ -14,7 +14,8 @@ import { StatusPill } from '@/components/data/StatusPill'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { Switch } from '@/components/form/Switch'
 import { Button } from '@/components/ui/button'
-import { PRICE_TIER_LABEL } from '@/constants/priceTiers'
+import { tierLabels } from '@/constants/priceTiers'
+import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { googleMapsUrl } from '@/lib/geo'
 import { formatINR } from '@/lib/format'
 import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
@@ -56,6 +57,7 @@ export default function Distributors() {
   // Routes › Areas live under `routes` in the geography store.
   const areas = useSelector(selectRoutes)
 
+  const priceTiers = usePriceTiers()
   const [search, setSearch] = useState('')
   const [managerId, setManagerId] = useState('')
   const [executiveId, setExecutiveId] = useState('')
@@ -161,6 +163,7 @@ export default function Distributors() {
     toast({ title: 'Distributor deleted', description: distributor.name })
   }
 
+  const tierLabel = tierLabels(priceTiers)
   const columns = useMemo(
     () =>
       helper.columns([
@@ -241,7 +244,7 @@ export default function Distributors() {
         }),
         helper.accessor('priceTier', {
           header: 'Price Tier',
-          cell: (i) => <StatusPill tone="info">{PRICE_TIER_LABEL[i.getValue()] ?? '—'}</StatusPill>,
+          cell: (i) => <StatusPill tone="info">{tierLabel[i.getValue()] ?? i.getValue() ?? '—'}</StatusPill>,
         }),
         helper.accessor('weeklyOff', {
           header: 'Weekly Off',

@@ -3,12 +3,15 @@ import { setSessionEndedHandler } from '@/services/api'
 import authReducer, { sessionEnded } from './authSlice'
 import distributorsReducer from './distributorsSlice'
 import geographyReducer from './geographySlice'
+import giftsReducer from './giftsSlice'
 import itemsReducer from './itemsSlice'
 import partiesReducer from './partiesSlice'
 import priceListsReducer from './priceListsSlice'
+import priceTiersReducer from './priceTiersSlice'
 import attendanceReducer from './attendanceSlice'
 import payoutsReducer from './payoutsSlice'
 import settingsReducer from './settingsSlice'
+import stockReducer from './stockSlice'
 import usersReducer from './usersSlice'
 import paymentsReducer from './paymentsSlice'
 import transactionsReducer from './transactionsSlice'
@@ -20,6 +23,9 @@ export const store = configureStore({
     items: itemsReducer,
     schemes: schemesReducer,
     priceLists: priceListsReducer,
+    priceTiers: priceTiersReducer,
+    gifts: giftsReducer,
+    stock: stockReducer,
     geography: geographyReducer,
     parties: partiesReducer,
     transactions: transactionsReducer,

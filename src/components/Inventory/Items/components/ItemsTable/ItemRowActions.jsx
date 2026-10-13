@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { CircleCheck, CircleDashed, IndianRupee, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
-import { PRICE_TIERS, priceFor } from '@/constants/priceTiers'
+import { hintFor, priceWith } from '@/constants/priceTiers'
+import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { formatPrice } from '@/lib/format'
 import {
   DropdownMenu,
@@ -15,12 +16,19 @@ import {
 export function ItemRowActions({ item, onEdit, onToggleStatus, onDelete }) {
   const active = item.status === 'ACTIVE'
   const [pricesOpen, setPricesOpen] = useState(false)
+  const tiers = usePriceTiers()
 
   /** Stored price if there is one, else the formula, else nothing. */
   const stored = Object.fromEntries((item.tierPrices ?? []).map((row) => [row.tier, row]))
-  const rows = PRICE_TIERS.map(({ value, label, hint }) => {
-    const own = stored[value]
-    return { value, label, hint, price: own ? own.price : priceFor(item.mrp, value), custom: Boolean(own?.isCustom) }
+  const rows = tiers.map(({ code, label, multiplier, hint }) => {
+    const own = stored[code]
+    return {
+      value: code,
+      label,
+      hint: hint ?? hintFor(multiplier),
+      price: own ? own.price : priceWith(item.mrp, multiplier),
+      custom: Boolean(own?.isCustom),
+    }
   })
 
   return (

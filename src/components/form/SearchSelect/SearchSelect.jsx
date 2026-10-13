@@ -1,11 +1,13 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { Fragment, useId, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { Popover } from 'radix-ui'
 import { cn } from '@/lib/utils'
 
 /**
  * Searchable single-select (the "Select Status" / "Select Warehouse" control).
- * options: [{ value, label, hint? }] — hint is a muted second line (code, price…). Keyboard: ↑ ↓ to move, Enter to pick, Esc to close.
+ * options: [{ value, label, hint?, group? }] — hint is a muted second line
+ * (code, price…), group puts a heading above a run of options. Keyboard: ↑ ↓ to
+ * move, Enter to pick, Esc to close.
  */
 export function SearchSelect({
   id,
@@ -15,6 +17,8 @@ export function SearchSelect({
   placeholder = 'Select',
   searchable = true,
   clearable = false,
+  /** Show at most this many at a time — a long catalogue is searched, not scrolled. */
+  limit,
   invalid = false,
   className,
   'aria-label': ariaLabel,
@@ -36,10 +40,21 @@ export function SearchSelect({
   const [portalContainer, setPortalContainer] = useState(undefined)
 
   const selected = options.find((o) => o.value === value)
-  const filtered = useMemo(() => {
+  const matching = useMemo(() => {
     const q = query.trim().toLowerCase()
     return q ? options.filter((o) => `${o.label} ${o.hint ?? ''}`.toLowerCase().includes(q)) : options
   }, [options, query])
+  /**
+   * A capped list is a window on a long catalogue, so the search covers all of
+   * it and whatever is already chosen is pinned on even when it falls outside
+   * the window — otherwise picking the 40th item makes it vanish.
+   */
+  const capped = useMemo(() => (limit ? matching.slice(0, limit) : matching), [matching, limit])
+  const filtered = useMemo(
+    () => (selected && !capped.some((o) => o.value === selected.value) ? [selected, ...capped] : capped),
+    [capped, selected],
+  )
+  const hidden = matching.length - capped.length
 
   const choose = (option) => {
     onChange(option.value)
@@ -147,9 +162,15 @@ export function SearchSelect({
             ) : (
               filtered.map((option, index) => {
                 const isSelected = option.value === value
+                const heading = option.group && option.group !== filtered[index - 1]?.group ? option.group : null
                 return (
+                  <Fragment key={option.value}>
+                  {heading && (
+                    <li role="presentation" className="px-3 pt-2.5 pb-1 text-[0.65rem] font-bold tracking-wide text-ink-muted uppercase">
+                      {heading}
+                    </li>
+                  )}
                   <li
-                    key={option.value}
                     id={`${listId}-${index}`}
                     role="option"
                     aria-selected={isSelected}
@@ -167,10 +188,16 @@ export function SearchSelect({
                     </span>
                     {isSelected && <Check className="size-4 shrink-0 text-green-deep" />}
                   </li>
+                  </Fragment>
                 )
               })
             )}
           </ul>
+          {hidden > 0 && (
+            <p className="border-t border-mint-pale px-3 py-2 text-xs text-ink-muted">
+              {hidden} more — type to narrow the list
+            </p>
+          )}
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

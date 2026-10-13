@@ -1,8 +1,8 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { listFeatures } from '@/components/data/DataTable'
 import { StatusPill } from '@/components/data/StatusPill'
-import { formatPrice, initialsOf } from '@/lib/format'
-import { LOW_STOCK_THRESHOLD } from '@/mocks/items'
+import { initialsOf } from '@/lib/format'
+import { LOW_STOCK_THRESHOLD, quantityUnitFor } from '@/mocks/items'
 import { ItemRowActions } from './ItemRowActions'
 
 const helper = createColumnHelper(listFeatures)
@@ -11,18 +11,15 @@ const helper = createColumnHelper(listFeatures)
 export const ITEM_COLUMN_OPTIONS = [
   { id: 'name', label: 'Item', required: true },
   { id: 'category', label: 'Category' },
-  { id: 'brand', label: 'Brand' },
+  { id: 'quantity', label: 'Quantity' },
   { id: 'unit', label: 'Unit' },
-  { id: 'mrp', label: 'MRP' },
-  { id: 'sellPrice', label: 'Sell price' },
-  { id: 'gst', label: 'GST %' },
   { id: 'hsn', label: 'HSN' },
   { id: 'stock', label: 'Stock' },
   { id: 'status', label: 'Status', required: true },
 ]
 
 /** Hidden until switched on in ⚙. */
-export const DEFAULT_ITEM_COLUMN_VISIBILITY = { brand: false, hsn: false }
+export const DEFAULT_ITEM_COLUMN_VISIBILITY = { hsn: false }
 
 function StockCell({ item }) {
   if (item.stock === 0) return <StatusPill tone="danger">Out of stock</StatusPill>
@@ -56,36 +53,28 @@ export function buildItemColumns({ onEdit, onToggleStatus, onDelete }) {
             )}
             <div className="min-w-0">
               <p className="truncate font-semibold text-black">{item.name}</p>
-              <p className="truncate font-mono text-xs text-ink-muted">{item.code || '—'}</p>
+              {item.code && <p className="truncate font-mono text-xs text-ink-muted">{item.code}</p>}
+              {/* The scheme used to ride under the MRP, which is no longer a column. */}
+              {item.offerText && <p className="truncate text-xs font-semibold text-green-deep">{item.offerText}</p>}
             </div>
           </div>
         )
       },
     }),
     helper.accessor('category', { header: 'Category', cell: (info) => info.getValue() || '—' }),
-    helper.accessor('brand', { header: 'Brand', cell: (info) => info.getValue() || '—' }),
+    helper.accessor('quantity', {
+      header: 'Quantity',
+      meta: { align: 'right' },
+      cell: ({ row }) =>
+        row.original.quantity ? (
+          <span className="font-mono tabular-nums">
+            {row.original.quantity} <span className="font-sans text-xs text-ink-muted">{quantityUnitFor(row.original.category)}</span>
+          </span>
+        ) : (
+          '—'
+        ),
+    }),
     helper.accessor('unit', { header: 'Unit', cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span> }),
-    helper.accessor('mrp', {
-      header: 'MRP',
-      meta: { align: 'right' },
-      cell: (info) => (info.getValue() ? <span className="font-mono tabular-nums">{formatPrice(info.getValue())}</span> : '—'),
-    }),
-    helper.accessor('sellPrice', {
-      header: 'Sell price',
-      meta: { align: 'right' },
-      cell: ({ row }) => (
-        <span className="inline-flex flex-col items-end">
-          <span className="font-mono font-medium text-black tabular-nums">{formatPrice(row.original.sellPrice)}</span>
-          <span className="text-xs text-ink-muted">{row.original.sellTaxMode === 'INCL' ? 'incl. tax' : 'excl. tax'}</span>
-          {row.original.offerText && <span className="text-xs font-semibold text-green-deep">{row.original.offerText}</span>}
-        </span>
-      ),
-    }),
-    helper.accessor('gst', {
-      header: 'GST',
-      meta: { align: 'center' },
-      cell: (info) => <span className="font-mono">{info.getValue()}%</span>,
-    }),
     helper.accessor('hsn', { header: 'HSN', cell: (info) => <span className="font-mono text-xs">{info.getValue() || '—'}</span> }),
     helper.accessor('stock', {
       header: 'Stock',

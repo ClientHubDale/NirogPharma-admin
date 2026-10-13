@@ -2,18 +2,22 @@ import { useState } from 'react'
 import { Check, X } from 'lucide-react'
 
 /**
- * Inline "add a new option" row (Category / Brand "+ New").
- * Calls onAdd(name) and closes; rejects blanks and duplicates (case-insensitive).
+ * Inline "add a new option" row (the Category "+ New").
+ * Calls onAdd(name, extra) and closes; rejects blanks and duplicates
+ * (case-insensitive). `extraOptions` adds a second, required choice beside the
+ * name — Category uses it to say what its quantity is counted in.
  */
-export function QuickAdd({ existing, onAdd, onCancel, placeholder = 'New name' }) {
+export function QuickAdd({ existing, onAdd, onCancel, placeholder = 'New name', extraOptions, extraLabel = 'Unit', extraPlaceholder = 'Unit' }) {
   const [name, setName] = useState('')
+  const [extra, setExtra] = useState('')
   const [error, setError] = useState('')
 
   const submit = () => {
     const trimmed = name.trim()
     if (!trimmed) return setError('Enter a name.')
     if (existing.some((e) => e.toLowerCase() === trimmed.toLowerCase())) return setError('That already exists.')
-    onAdd(trimmed)
+    if (extraOptions && !extra) return setError(`Choose a ${extraLabel.toLowerCase()}.`)
+    onAdd(trimmed, extra)
   }
 
   return (
@@ -41,6 +45,24 @@ export function QuickAdd({ existing, onAdd, onCancel, placeholder = 'New name' }
           aria-label={placeholder}
           className="min-w-0 flex-1 bg-transparent px-3.5 text-sm outline-none"
         />
+        {extraOptions && (
+          <select
+            value={extra}
+            aria-label={extraLabel}
+            onChange={(e) => {
+              setExtra(e.target.value)
+              setError('')
+            }}
+            className="h-full shrink-0 border-l border-mint-pale bg-bg px-2 text-sm font-medium text-ink outline-none"
+          >
+            <option value="">{extraPlaceholder}</option>
+            {extraOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.value}
+              </option>
+            ))}
+          </select>
+        )}
         <button type="button" onClick={submit} aria-label="Add" className="grid w-11 place-items-center bg-black text-white hover:bg-black/85">
           <Check className="size-4" />
         </button>

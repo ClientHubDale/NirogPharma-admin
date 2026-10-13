@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { FormSection } from '@/components/form/FormSection'
 import { ImageUploader } from '@/components/form/ImageUploader'
-import { InlineSelect } from '@/components/form/InlineSelect'
 import { QuickAdd } from '@/components/form/QuickAdd'
 import { SelectField } from '@/components/form/SelectField'
 import { Switch } from '@/components/form/Switch'
 import { TextAreaField } from '@/components/form/TextAreaField'
 import { TextField } from '@/components/form/TextField'
+import { SchemeFields } from './SchemeFields'
 import { TierPrices } from './TierPrices'
-import { CESS_RATES, DISCOUNT_TYPES, GST_RATES, TAX_MODES, UNITS, WAREHOUSES } from '@/mocks/items'
+import { useGifts } from '@/hooks/useGifts'
+import { usePriceTiers } from '@/hooks/usePriceTiers'
+import { QUANTITY_UNITS, UNITS, quantityUnitFor } from '@/mocks/items'
 
 const NUMERIC = { inputMode: 'decimal', autoComplete: 'off' }
 
@@ -27,19 +29,33 @@ function NewButton({ onClick, label }) {
 }
 
 /**
- * Create / edit item fields — General, Price and Stock details.
+ * Create / edit item fields — General and Price details.
  * Controlled: `form` + `onChange(field, value)`; `errors` from validateItemForm.
+ *
+ * The client dropped sell price, item code, ERP ID, purchase price, cess and
+ * discount on 8 Oct: a distributor's price comes from the rate columns and the
+ * counter price is the MRP, so there is nothing for the other prices to do.
+ * Stock details went the same way on 13 Oct — opening stock, batches and
+ * warehouses belong to the stock module, not to creating a product.
  */
-export function ItemForm({ form, errors, onChange, categories, brands, onAddCategory, onAddBrand, onImageError }) {
-  const [adding, setAdding] = useState(null) // 'category' | 'brand' | null
+export function ItemForm({ form, errors, onChange, categories, categoryUnits, items = [], onAddCategory, onAddTier, onRemoveTier, onAddGift, onImageError }) {
+  const [adding, setAdding] = useState(false) // adding a category
+  const priceTiers = usePriceTiers()
+  const gifts = useGifts()
   const set = (field) => (e) => onChange(field, e.target.value)
   const setNumber = (field) => (e) => onChange(field, e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))
   const setDigits = (field) => (e) => onChange(field, e.target.value.replace(/\D/g, ''))
-  const unitLabel = form.unit || 'Unit'
   // Always offer the item's current value, even if it isn't in the list yet.
   const withCurrent = (list, current) => (current && !list.includes(current) ? [...list, current] : list)
   const categoryOptions = withCurrent(categories, form.category).map((c) => ({ value: c, label: c }))
-  const brandOptions = withCurrent(brands, form.brand).map((b) => ({ value: b, label: b }))
+  // How much is in one pack is counted differently per category: ml, capsules,
+  // grams. Picking a category sets the unit; the item carries it from then on.
+  const unitOf = (category) => quantityUnitFor(category, categoryUnits)
+  const quantityUnit = form.quantityUnit || unitOf(form.category)
+  const chooseCategory = (category, unit) => {
+    onChange('category', category)
+    onChange('quantityUnit', unit ?? unitOf(category))
+  }
 
   return (
     <>
@@ -78,68 +94,21 @@ export function ItemForm({ form, errors, onChange, categories, brands, onAddCate
           error={errors.unit}
         />
 
-        <TextField
-          id="item-sell-price"
-          label="Sell price"
-          required
-          size="md"
-          prefix="₹"
-          placeholder="Sale price"
-          {...NUMERIC}
-          value={form.sellPrice}
-          onChange={setNumber('sellPrice')}
-          error={errors.sellPrice}
-          suffix={
-            <InlineSelect
-              aria-label="Sell price tax"
-              value={form.sellTaxMode}
-              onChange={(v) => onChange('sellTaxMode', v)}
-              options={TAX_MODES}
-            />
-          }
-        />
-
-        <TextField
-          id="item-code"
-          label="Item Code"
-          size="md"
-          placeholder="Item code"
-          value={form.code}
-          onChange={set('code')}
-          error={errors.code}
-        />
-
-        <TextField
-          id="item-erp-id"
-          label="ERP ID"
-          size="md"
-          placeholder="ID in Tally / ERP (optional)"
-          value={form.erpId}
-          onChange={set('erpId')}
-        />
-
-        <TextAreaField
-          id="item-description"
-          label="Item Description"
-          placeholder="Item description"
-          rows={2}
-          value={form.description}
-          onChange={set('description')}
-          className="sm:col-span-2"
-        />
-
         <div>
-          {adding === 'category' ? (
+          {adding ? (
             <>
               <p className="mb-2 text-sm font-semibold text-ink">New category</p>
               <QuickAdd
                 existing={categories}
                 placeholder="Category name"
-                onCancel={() => setAdding(null)}
-                onAdd={(name) => {
-                  onAddCategory(name)
-                  onChange('category', name)
-                  setAdding(null)
+                extraOptions={QUANTITY_UNITS}
+                extraLabel="Quantity unit"
+                extraPlaceholder="Qty in"
+                onCancel={() => setAdding(false)}
+                onAdd={(name, unit) => {
+                  onAddCategory(name, unit)
+                  chooseCategory(name, unit)
+                  setAdding(false)
                 }}
               />
             </>
@@ -151,42 +120,48 @@ export function ItemForm({ form, errors, onChange, categories, brands, onAddCate
               clearable
               options={categoryOptions}
               value={form.category}
-              onChange={(v) => onChange('category', v)}
-              labelAction={<NewButton label="Add category" onClick={() => setAdding('category')} />}
+              onChange={(v) => chooseCategory(v)}
+              labelAction={<NewButton label="Add category" onClick={() => setAdding(true)} />}
             />
           )}
         </div>
 
-        <div>
-          {adding === 'brand' ? (
-            <>
-              <p className="mb-2 text-sm font-semibold text-ink">New brand</p>
-              <QuickAdd
-                existing={brands}
-                placeholder="Brand name"
-                onCancel={() => setAdding(null)}
-                onAdd={(name) => {
-                  onAddBrand(name)
-                  onChange('brand', name)
-                  setAdding(null)
-                }}
-              />
-            </>
-          ) : (
-            <SelectField
-              id="item-brand"
-              label="Brand"
-              placeholder="Select brand"
-              clearable
-              options={brandOptions}
-              value={form.brand}
-              onChange={(v) => onChange('brand', v)}
-              labelAction={<NewButton label="Add brand" onClick={() => setAdding('brand')} />}
-            />
-          )}
-        </div>
+        {/* Replaced Brand (client, 8 Oct): everything is Nirog, and what they
+            need on the item is how much is in one pack. */}
+        <TextField
+          id="item-quantity"
+          label="Quantity"
+          size="md"
+          placeholder={quantityUnit ? `Quantity in ${quantityUnit}` : 'Pick a category first'}
+          {...NUMERIC}
+          value={form.quantity}
+          onChange={setNumber('quantity')}
+          error={errors.quantity}
+          suffix={
+            <span className="flex h-full items-center border-l border-mint-pale bg-bg px-3.5 text-sm font-medium text-ink-muted">
+              {quantityUnit || '—'}
+            </span>
+          }
+        />
 
-        <ImageUploader images={form.images} onChange={(images) => onChange('images', images)} onError={onImageError} />
+        {/* The client's "box packing" — typed free-hand ("1X48X200ML",
+            "1 box = 48 bottles"). It is stored in the item's description. */}
+        <TextAreaField
+          id="item-box-packing"
+          label="Box Packing"
+          placeholder="e.g. 1X48X200ML  ·  1 box = 48 bottles"
+          rows={2}
+          value={form.description}
+          onChange={set('description')}
+          className="sm:col-span-2"
+        />
+
+        <ImageUploader
+          label="Upload Product Image"
+          images={form.images}
+          onChange={(images) => onChange('images', images)}
+          onError={onImageError}
+        />
       </FormSection>
 
       <FormSection title="Price Details">
@@ -205,31 +180,14 @@ export function ItemForm({ form, errors, onChange, categories, brands, onAddCate
           mrp={form.mrp}
           flat={form.flatTierPricing}
           tierPrices={form.tierPrices}
+          tiers={priceTiers}
           onChange={(next) => onChange('tierPrices', next)}
           onFlatChange={(on) => onChange('flatTierPricing', on)}
+          onAddTier={onAddTier}
+          onRemoveTier={onRemoveTier}
         />
 
-        <TextField
-          id="item-purchase-price"
-          label="Purchase price"
-          size="md"
-          prefix="₹"
-          placeholder="Purchase price"
-          {...NUMERIC}
-          value={form.purchasePrice}
-          onChange={setNumber('purchasePrice')}
-          error={errors.purchasePrice}
-          suffix={
-            <InlineSelect
-              aria-label="Purchase price tax"
-              value={form.purchaseTaxMode}
-              onChange={(v) => onChange('purchaseTaxMode', v)}
-              options={TAX_MODES}
-            />
-          }
-        />
-
-        <div className="grid grid-cols-1 gap-5 sm:col-span-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:col-span-2 sm:grid-cols-2">
           <TextField
             id="item-hsn"
             label="HSN Code"
@@ -241,121 +199,28 @@ export function ItemForm({ form, errors, onChange, categories, brands, onAddCate
             onChange={setDigits('hsn')}
             error={errors.hsn}
           />
-          <SelectField
+          {/* Typed, not picked: the client uses rates that are not on any
+              short list, and the % is added for them. */}
+          <TextField
             id="item-gst"
-            label="GST %"
-            placeholder="Select tax"
-            searchable={false}
-            options={GST_RATES}
+            label="GST"
+            size="md"
+            placeholder="e.g. 12"
+            {...NUMERIC}
             value={form.gst}
-            onChange={(v) => onChange('gst', v)}
-          />
-          <SelectField
-            id="item-cess"
-            label="Cess %"
-            placeholder="Select cess"
-            searchable={false}
-            options={CESS_RATES}
-            value={form.cess}
-            onChange={(v) => onChange('cess', v)}
+            onChange={setNumber('gst')}
+            error={errors.gst}
+            suffix={
+              <span className="flex h-full items-center border-l border-mint-pale bg-bg px-3.5 text-sm font-medium text-ink-muted">
+                %
+              </span>
+            }
           />
         </div>
 
-        <TextField
-          id="item-discount"
-          label="Discount"
-          size="md"
-          placeholder="Discount"
-          {...NUMERIC}
-          value={form.discount}
-          onChange={setNumber('discount')}
-          error={errors.discount}
-          suffix={
-            <InlineSelect
-              aria-label="Discount type"
-              value={form.discountType}
-              onChange={(v) => onChange('discountType', v)}
-              options={DISCOUNT_TYPES}
-            />
-          }
-        />
-        <TextField
-          id="item-offer"
-          label="Offer text"
-          size="md"
-          placeholder="e.g. 10 + 1 free"
-          maxLength={60}
-          value={form.offerText}
-          onChange={set('offerText')}
-        />
+        <SchemeFields form={form} errors={errors} items={items} gifts={gifts} onChange={onChange} onAddGift={onAddGift} />
       </FormSection>
 
-      <FormSection title="Stock Details">
-        <TextField
-          id="item-stock"
-          label="Opening stock"
-          size="md"
-          placeholder="Opening stock"
-          inputMode="numeric"
-          value={form.stock}
-          onChange={setDigits('stock')}
-          error={errors.stock}
-          suffix={<span className="flex h-full items-center border-l border-mint-pale bg-bg px-3.5 text-sm font-medium text-ink-muted">{unitLabel}</span>}
-        />
-        <TextField
-          id="item-opening-stock-date"
-          label="Opening stock date"
-          size="md"
-          type="date"
-          max={new Date().toISOString().slice(0, 10)}
-          value={form.openingStockDate}
-          onChange={set('openingStockDate')}
-          error={errors.openingStockDate}
-        />
-        <SelectField
-          id="item-warehouse"
-          label="Warehouse"
-          placeholder="Select warehouse"
-          options={WAREHOUSES}
-          value={form.warehouseId}
-          onChange={(v) => onChange('warehouseId', v)}
-          error={errors.warehouseId}
-        />
-        <TextField
-          id="item-weight"
-          label="Weight"
-          size="md"
-          placeholder="e.g. 100 g"
-          maxLength={20}
-          value={form.weight}
-          onChange={set('weight')}
-        />
-        <SelectField
-          id="item-secondary-unit"
-          label="Secondary unit"
-          placeholder="e.g. BOX (optional)"
-          clearable
-          options={UNITS.filter((u) => u.value !== form.unit)}
-          value={form.secondaryUnit}
-          onChange={(v) => {
-            onChange('secondaryUnit', v)
-            if (!v) onChange('conversionFactor', '')
-          }}
-          error={errors.secondaryUnit}
-        />
-        <TextField
-          id="item-conversion"
-          label={form.secondaryUnit ? `1 ${form.secondaryUnit} contains` : 'Multiplier'}
-          size="md"
-          placeholder={form.secondaryUnit ? 'e.g. 10' : 'Pick a secondary unit first'}
-          inputMode="numeric"
-          disabled={!form.secondaryUnit}
-          value={form.conversionFactor}
-          onChange={setDigits('conversionFactor')}
-          error={errors.conversionFactor}
-          suffix={<span className="flex h-full items-center border-l border-mint-pale bg-bg px-3.5 text-sm font-medium text-ink-muted">{unitLabel}</span>}
-        />
-      </FormSection>
     </>
   )
 }

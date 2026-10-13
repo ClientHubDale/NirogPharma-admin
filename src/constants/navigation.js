@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   UserCog,
   Users,
+  Warehouse,
   Wallet,
   WalletCards,
 } from 'lucide-react'
@@ -39,6 +40,14 @@ export const adminNav = [
       { label: 'Items', path: `${ADMIN}/inventory/items` },
       { label: 'Schemes', path: `${ADMIN}/inventory/schemes` },
       { label: 'Price Lists', path: `${ADMIN}/inventory/price-lists` },
+    ],
+  },
+  {
+    label: 'Stocks',
+    icon: Warehouse,
+    children: [
+      { label: 'Factory Stocks', path: `${ADMIN}/stocks/factory` },
+      { label: 'Distributor Stocks', path: `${ADMIN}/stocks/distributor` },
     ],
   },
   {

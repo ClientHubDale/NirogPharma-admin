@@ -13,7 +13,7 @@ import { emptyPartyForm, formToParty, nextPartyId, validatePartyForm } from '@/c
 import { PARTY_TYPES } from '@/components/Parties/shared/partyTypes'
 import { Button } from '@/components/ui/button'
 import { formatPrice } from '@/lib/format'
-import { INITIAL_BRANDS, INITIAL_CATEGORIES, WAREHOUSES } from '@/mocks/items'
+import { INITIAL_CATEGORIES, WAREHOUSES } from '@/mocks/items'
 import { routeAdded, selectCities, selectRoutes } from '@/store/geographySlice'
 import { partySaved, selectParties } from '@/store/partiesSlice'
 import { selectPriceLists } from '@/store/priceListsSlice'
@@ -329,9 +329,7 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
             errors={itemDrawer.errors}
             onChange={(f, v) => setItemDrawer((d) => ({ ...d, form: { ...d.form, [f]: v }, errors: { ...d.errors, [f]: undefined } }))}
             categories={INITIAL_CATEGORIES}
-            brands={INITIAL_BRANDS}
             onAddCategory={() => {}}
-            onAddBrand={() => {}}
           />
         )}
       </FormDrawer>

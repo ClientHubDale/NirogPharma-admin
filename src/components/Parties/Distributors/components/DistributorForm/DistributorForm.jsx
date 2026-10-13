@@ -4,7 +4,8 @@ import { LocationField } from '@/components/form/LocationField'
 import { SelectField } from '@/components/form/SelectField'
 import { TextAreaField } from '@/components/form/TextAreaField'
 import { TextField } from '@/components/form/TextField'
-import { PRICE_TIER_OPTIONS } from '@/constants/priceTiers'
+import { tierOptions } from '@/constants/priceTiers'
+import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { DISTRIBUTOR_STATUSES, WEEK_DAYS } from '../../distributorModel'
 
 /**
@@ -13,6 +14,7 @@ import { DISTRIBUTOR_STATUSES, WEEK_DAYS } from '../../distributorModel'
  * target the admin panel needs.
  */
 export function DistributorForm({ form, errors, onChange, managers, executives, regions, cities, areas }) {
+  const priceTiers = usePriceTiers()
   const set = (field) => (e) => onChange(field, e.target.value)
   const digits = (value) => value.replace(/\D/g, '')
   const money = (value) => value.replace(/[^\d.]/g, '')
@@ -197,7 +199,7 @@ export function DistributorForm({ form, errors, onChange, managers, executives, 
           label="Price tier"
           required
           searchable={false}
-          options={PRICE_TIER_OPTIONS}
+          options={tierOptions(priceTiers)}
           value={form.priceTier}
           onChange={(v) => onChange('priceTier', v)}
           error={errors.priceTier}
