@@ -11,9 +11,9 @@ export const fetchGifts = createAsyncThunk('gifts/fetch', async (_arg, { rejectW
   }
 })
 
-export const addGift = createAsyncThunk('gifts/add', async ({ name, unit }, { rejectWithValue }) => {
+export const addGift = createAsyncThunk('gifts/add', async ({ name, unit, image }, { rejectWithValue }) => {
   try {
-    return await giftsService.createGift({ name, unit })
+    return await giftsService.createGift({ name, unit, image })
   } catch (error) {
     return rejectWithValue(giftsService.errorFrom(error))
   }

@@ -38,8 +38,8 @@ function NewButton({ onClick, label }) {
  * Stock details went the same way on 13 Oct — opening stock, batches and
  * warehouses belong to the stock module, not to creating a product.
  */
-export function ItemForm({ form, errors, onChange, categories, categoryUnits, items = [], onAddCategory, onAddTier, onRemoveTier, onAddGift, onImageError }) {
-  const [adding, setAdding] = useState(false) // adding a category
+export function ItemForm({ form, errors, onChange, categories, categoryUnits, units, items = [], onAddCategory, onAddUnit, onAddTier, onRemoveTier, onAddGift, onImageError }) {
+  const [adding, setAdding] = useState(null) // 'category' | 'unit' | null
   const priceTiers = usePriceTiers()
   const gifts = useGifts()
   const set = (field) => (e) => onChange(field, e.target.value)
@@ -48,6 +48,10 @@ export function ItemForm({ form, errors, onChange, categories, categoryUnits, it
   // Always offer the item's current value, even if it isn't in the list yet.
   const withCurrent = (list, current) => (current && !list.includes(current) ? [...list, current] : list)
   const categoryOptions = withCurrent(categories, form.category).map((c) => ({ value: c, label: c }))
+  const unitOptions = withCurrent(units ?? UNITS.map((u) => u.value), form.unit).map((code) => ({
+    value: code,
+    label: UNITS.find((unit) => unit.value === code)?.label ?? code,
+  }))
   // How much is in one pack is counted differently per category: ml, capsules,
   // grams. Picking a category sets the unit; the item carries it from then on.
   const unitOf = (category) => quantityUnitFor(category, categoryUnits)
@@ -83,19 +87,39 @@ export function ItemForm({ form, errors, onChange, categories, categoryUnits, it
           </div>
         </div>
 
-        <SelectField
-          id="item-unit"
-          label="Unit"
-          required
-          placeholder="Select unit"
-          options={UNITS}
-          value={form.unit}
-          onChange={(v) => onChange('unit', v)}
-          error={errors.unit}
-        />
+        <div>
+          {adding === 'unit' ? (
+            <>
+              <p className="mb-2 text-sm font-semibold text-ink">New unit</p>
+              <QuickAdd
+                existing={unitOptions.map((option) => option.value)}
+                placeholder="e.g. SACHET"
+                onCancel={() => setAdding(null)}
+                onAdd={(name) => {
+                  const code = name.trim().toUpperCase()
+                  onAddUnit?.(code)
+                  onChange('unit', code)
+                  setAdding(null)
+                }}
+              />
+            </>
+          ) : (
+            <SelectField
+              id="item-unit"
+              label="Unit"
+              required
+              placeholder="Select unit"
+              options={unitOptions}
+              value={form.unit}
+              onChange={(v) => onChange('unit', v)}
+              error={errors.unit}
+              labelAction={onAddUnit && <NewButton label="Add unit" onClick={() => setAdding('unit')} />}
+            />
+          )}
+        </div>
 
         <div>
-          {adding ? (
+          {adding === 'category' ? (
             <>
               <p className="mb-2 text-sm font-semibold text-ink">New category</p>
               <QuickAdd
@@ -104,11 +128,11 @@ export function ItemForm({ form, errors, onChange, categories, categoryUnits, it
                 extraOptions={QUANTITY_UNITS}
                 extraLabel="Quantity unit"
                 extraPlaceholder="Qty in"
-                onCancel={() => setAdding(false)}
+                onCancel={() => setAdding(null)}
                 onAdd={(name, unit) => {
                   onAddCategory(name, unit)
                   chooseCategory(name, unit)
-                  setAdding(false)
+                  setAdding(null)
                 }}
               />
             </>
@@ -121,7 +145,7 @@ export function ItemForm({ form, errors, onChange, categories, categoryUnits, it
               options={categoryOptions}
               value={form.category}
               onChange={(v) => chooseCategory(v)}
-              labelAction={<NewButton label="Add category" onClick={() => setAdding(true)} />}
+              labelAction={<NewButton label="Add category" onClick={() => setAdding('category')} />}
             />
           )}
         </div>

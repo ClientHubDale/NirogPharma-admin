@@ -9,8 +9,9 @@ import { Notice } from '@/components/data/Notice'
 import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
+import { Modal } from '@/components/common/Modal'
+import { StatusPill } from '@/components/data/StatusPill'
 import { SearchSelect } from '@/components/form/SearchSelect'
-import { TextField } from '@/components/form/TextField'
 import { Button } from '@/components/ui/button'
 import { useItems } from '@/hooks/useItems'
 import { INITIAL_CATEGORIES } from '@/mocks/items'
@@ -29,12 +30,18 @@ import {
 import { BatchForm } from './components/BatchForm'
 import { buildBatchColumns, DEFAULT_BATCH_COLUMN_VISIBILITY } from './components/BatchesTable'
 import { MoveForm } from '../components/MoveForm'
+import * as stockService from '@/services/stockService'
 import {
   batchToForm,
-  currentMonth,
+  currentPeriod,
   emptyBatchForm,
   emptyMoveForm,
   EXPIRY_FILTERS,
+  EXPIRY_TONE,
+  fiscalYearLabel,
+  fiscalYearOptions,
+  FY_MONTHS,
+  periodFor,
   validateBatchForm,
   validateMoveForm,
 } from '../stockModel'
@@ -75,7 +82,12 @@ export default function FactoryStocks() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
   const [expiry, setExpiry] = useState('')
-  const [period, setPeriod] = useState(currentMonth)
+  // The books run 1 April to 31 March, so the period is a year and a month —
+  // not a free date range. Inside a month, last month's closing is the opening;
+  // across a whole year, last year's closing is.
+  const [period, setPeriod] = useState(currentPeriod)
+  const [expanded, setExpanded] = useState(() => new Set()) // items whose batches are open
+  const [history, setHistory] = useState(null) // { item, batches, loading }
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [columnVisibility, setColumnVisibility] = useState(DEFAULT_BATCH_COLUMN_VISIBILITY)
   const [drawer, setDrawer] = useState(null) // { form, initial, errors, editingId, batch }
@@ -89,29 +101,86 @@ export default function FactoryStocks() {
   const changed = (state) => Boolean(state) && JSON.stringify(state.form) !== JSON.stringify(state.initial)
 
   // The period is part of the request: the server works the four figures out.
-  const load = () => dispatch(fetchBatches({ from: period.from, to: period.to }))
+  const load = () => dispatch(fetchBatches(periodFor(period)))
 
   useEffect(() => {
-    dispatch(fetchBatches({ from: period.from, to: period.to }))
+    const { from, to } = periodFor(period)
+    dispatch(fetchBatches({ from, to }))
     dispatch(fetchStockSummary())
     dispatch(fetchDistributors())
-  }, [dispatch, period.from, period.to])
+  }, [dispatch, period])
 
-  const filtered = useMemo(() => {
+  /**
+   * One line per item, carrying that item's figures for the period, with its
+   * batches gathered underneath — the client's "आइटम कैटेगरी यूनिट सिंगल लाइन,
+   * बैच मल्टिपल". An item is listed while it still holds stock or something
+   * moved during the period; a batch that is finished is kept, inside the
+   * expansion, because that is where you go to see what was made in it.
+   */
+  const itemRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return batches.filter(
-      (batch) =>
-        (!q ||
-          batch.itemName.toLowerCase().includes(q) ||
-          batch.itemCode?.toLowerCase().includes(q) ||
-          batch.batchNo.toLowerCase().includes(q)) &&
-        (!category || batch.category === category) &&
-        (!expiry || batch.expiryState === expiry),
-    )
+    const byItem = new Map()
+
+    for (const batch of batches) {
+      const row = byItem.get(batch.itemId) ?? {
+        kind: 'item',
+        id: `item:${batch.itemId}`,
+        itemId: batch.itemId,
+        itemName: batch.itemName,
+        itemCode: batch.itemCode,
+        category: batch.category,
+        unit: batch.unit,
+        opening: 0,
+        in: 0,
+        out: 0,
+        closing: 0,
+        batches: [],
+      }
+
+      row.opening += batch.opening
+      row.in += batch.in
+      row.out += batch.out
+      row.closing += batch.closing
+      row.batches.push({ ...batch, kind: 'batch', id: `batch:${batch.id}`, batchId: batch.id })
+      byItem.set(batch.itemId, row)
+    }
+
+    return [...byItem.values()]
+      .filter((row) => row.closing > 0 || row.in > 0 || row.out > 0)
+      .filter(
+        (row) =>
+          (!q ||
+            row.itemName.toLowerCase().includes(q) ||
+            row.itemCode?.toLowerCase().includes(q) ||
+            row.batches.some((batch) => batch.batchNo.toLowerCase().includes(q))) &&
+          (!category || row.category === category) &&
+          (!expiry || row.batches.some((batch) => batch.expiryState === expiry)),
+      )
+      .sort((a, b) => a.itemName.localeCompare(b.itemName))
   }, [batches, search, category, expiry])
+
+  /** Item lines, each followed by its batch lines when it is open. */
+  const filtered = useMemo(
+    () => itemRows.flatMap((row) => (expanded.has(row.itemId) ? [row, ...row.batches] : [row])),
+    [itemRows, expanded],
+  )
+
+  const toggle = (itemId) =>
+    setExpanded((open) => {
+      const next = new Set(open)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pagination.pageSize))
   const page = pagination.pageIndex < pageCount ? pagination : { ...pagination, pageIndex: 0 }
+
+  /** "October 2026–27" or "2026–27" — what the filters are currently showing. */
+  const periodLabel =
+    period.month === ''
+      ? fiscalYearLabel(Number(period.year))
+      : `${FY_MONTHS.find((m) => m.value === period.month)?.label} ${fiscalYearLabel(Number(period.year))}`
 
   const categoryOptions = useMemo(() => {
     const all = [...INITIAL_CATEGORIES, ...batches.map((batch) => batch.category)]
@@ -124,10 +193,25 @@ export default function FactoryStocks() {
         onEdit: (batch) => openEdit(batch),
         onIssue: (batch) => openIssue(batch),
         onDelete: (batch) => destroy(batch),
+        onItemHistory: (row) => openHistory(row),
+        expanded,
+        onToggle: toggle,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [expanded],
   )
+
+  /** Every batch of one item for the whole financial year — "1 अप्रैल से अभी तक". */
+  const openHistory = async (batch) => {
+    const year = periodFor({ year: period.year, month: '' })
+    setHistory({ item: batch, batches: [], loading: true })
+    try {
+      const { batches: rows } = await stockService.listBatches({ itemId: batch.itemId, ...year })
+      setHistory({ item: batch, batches: rows, loading: false })
+    } catch {
+      setHistory({ item: batch, batches: [], loading: false })
+    }
+  }
 
   /* ── the batch drawer ─────────────────────────────────── */
 
@@ -138,7 +222,7 @@ export default function FactoryStocks() {
 
   const openEdit = (batch) => {
     const form = batchToForm(batch)
-    setDrawer({ form, initial: form, errors: {}, editingId: batch.id, batch })
+    setDrawer({ form, initial: form, errors: {}, editingId: batch.batchId ?? batch.id, batch })
   }
 
   const updateField = (field, value) =>
@@ -173,7 +257,7 @@ export default function FactoryStocks() {
   }
 
   const destroy = async (batch) => {
-    const result = await dispatch(removeBatch({ id: batch.id }))
+    const result = await dispatch(removeBatch({ id: batch.batchId ?? batch.id }))
     if (removeBatch.rejected.match(result)) {
       return toast({ tone: 'danger', title: 'Could not delete', description: result.payload.message })
     }
@@ -185,7 +269,7 @@ export default function FactoryStocks() {
   /* ── issuing to a distributor ─────────────────────────── */
 
   const openIssue = (batch) => {
-    const form = emptyMoveForm({ batchId: batch.id })
+    const form = emptyMoveForm({ batchId: batch.batchId ?? batch.id })
     setIssuing({ form, initial: form, errors: {}, batch })
   }
 
@@ -229,7 +313,10 @@ export default function FactoryStocks() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <PageHeader title="Factory Stocks" subtitle={`${summary.batches} ${summary.batches === 1 ? 'batch' : 'batches'} in the factory`}>
+      <PageHeader
+        title="Factory Stocks"
+        subtitle={`${summary.batches} ${summary.batches === 1 ? 'batch' : 'batches'} in the factory · ${periodLabel}`}
+      >
         <Button size="lg" className="h-11" onClick={openCreate}>
           <Plus data-icon="inline-start" /> New
         </Button>
@@ -295,27 +382,30 @@ export default function FactoryStocks() {
             }}
             className="sm:w-48"
           />
-          <div className="flex items-center gap-2">
-            <TextField
-              id="stock-from"
-              aria-label="Period from"
-              size="md"
-              type="date"
-              value={period.from}
-              onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))}
-              className="w-40"
-            />
-            <span className="text-sm text-ink-muted">to</span>
-            <TextField
-              id="stock-to"
-              aria-label="Period to"
-              size="md"
-              type="date"
-              value={period.to}
-              onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))}
-              className="w-40"
-            />
-          </div>
+          <SearchSelect
+            aria-label="Financial year"
+            placeholder="Year"
+            searchable={false}
+            options={fiscalYearOptions()}
+            value={period.year}
+            onChange={(v) => {
+              setPeriod((p) => ({ ...p, year: v || p.year }))
+              resetPage()
+            }}
+            className="sm:w-36"
+          />
+          <SearchSelect
+            aria-label="Month"
+            placeholder="Whole year"
+            searchable={false}
+            options={FY_MONTHS}
+            value={period.month}
+            onChange={(v) => {
+              setPeriod((p) => ({ ...p, month: v ?? '' }))
+              resetPage()
+            }}
+            className="sm:w-40"
+          />
           <Pagination
             pageIndex={page.pageIndex}
             pageSize={page.pageSize}
@@ -333,21 +423,35 @@ export default function FactoryStocks() {
           <DataTable
             data={filtered}
             columns={columns}
-            getRowId={(batch) => batch.id}
+            getRowId={(row) => row.id}
             pagination={page}
             onPaginationChange={setPagination}
             columnVisibility={columnVisibility}
             onColumnVisibilityChange={setColumnVisibility}
-            onRowClick={openEdit}
+            onRowClick={(row) => (row.kind === 'batch' ? openEdit(row) : toggle(row.itemId))}
             empty={
               <EmptyState
                 icon={Boxes}
-                title={search || category || expiry ? 'No batches match' : 'No stock yet'}
-                description="A batch is one production run: a number, a quantity, and the dates on the carton."
+                title={
+                  search || category || expiry
+                    ? 'No batches match'
+                    : summary.batches === 0
+                      ? 'No stock yet'
+                      : `Nothing in ${periodLabel}`
+                }
+                description={
+                  search || category || expiry
+                    ? 'Nothing in this period matches the filters.'
+                    : summary.batches === 0
+                      ? 'A batch is one production run: a number, a quantity, and the dates on the carton.'
+                      : `Nothing was made or moved in ${periodLabel}. The factory holds ${summary.quantity.toLocaleString('en-IN')} across ${summary.batches} ${summary.batches === 1 ? 'batch' : 'batches'} — pick another year or month above to find it.`
+                }
               >
-                <Button size="lg" onClick={openCreate}>
-                  <Plus data-icon="inline-start" /> New batch
-                </Button>
+                {summary.batches === 0 && (
+                  <Button size="lg" onClick={openCreate}>
+                    <Plus data-icon="inline-start" /> New batch
+                  </Button>
+                )}
               </EmptyState>
             }
           />
@@ -367,6 +471,55 @@ export default function FactoryStocks() {
       >
         {drawer && <BatchForm form={drawer.form} errors={drawer.errors} items={items} onChange={updateField} editing={drawer.batch} />}
       </FormDrawer>
+
+      <Modal
+        open={Boolean(history)}
+        onOpenChange={(open) => !open && setHistory(null)}
+        title={history ? `${history.item.itemName} — every batch` : ''}
+        description={history ? `${fiscalYearLabel(Number(period.year))} · 1 April to 31 March` : ''}
+        className="max-w-3xl"
+      >
+        {history?.loading ? (
+          <div className="grid min-h-40 place-items-center" role="status" aria-label="Loading batches">
+            <span className="size-7 animate-spin rounded-full border-3 border-mint border-t-green-deep" />
+          </div>
+        ) : history?.batches.length === 0 ? (
+          <p className="px-1 py-6 text-center text-sm text-ink-muted">No batches of this item in {fiscalYearLabel(Number(period.year))}.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-mint-pale text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
+                <th className="py-2 pr-3">Batch</th>
+                <th className="py-2 pr-3">Expiry</th>
+                <th className="py-2 pr-3 text-right">Made</th>
+                <th className="py-2 pr-3 text-right">Issued</th>
+                <th className="py-2 text-right">In stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history?.batches.map((batch) => (
+                <tr key={batch.id} className="border-b border-mint-pale/70 last:border-0">
+                  <td className="py-2.5 pr-3 font-mono text-xs font-semibold text-black">{batch.batchNo}</td>
+                  <td className="py-2.5 pr-3">
+                    {batch.expiryState === 'OK' || batch.expiryState === 'NONE' ? (
+                      <span className="text-ink-muted">{batch.expiryDate || '—'}</span>
+                    ) : (
+                      <StatusPill tone={EXPIRY_TONE[batch.expiryState]}>
+                        {batch.expiryState === 'EXPIRED' ? 'Expired' : batch.expiryDate}
+                      </StatusPill>
+                    )}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right font-mono tabular-nums">{batch.quantity}</td>
+                  <td className="py-2.5 pr-3 text-right font-mono tabular-nums text-ink-muted">{batch.out}</td>
+                  <td className="py-2.5 text-right font-mono font-semibold tabular-nums">
+                    {batch.available > 0 ? `${batch.available} ${batch.unit}` : <span className="text-ink-muted">finished</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Modal>
 
       <FormDrawer
         open={Boolean(issuing)}

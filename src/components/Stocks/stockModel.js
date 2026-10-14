@@ -3,16 +3,71 @@
  * these are only the forms and the small display helpers both screens use.
  */
 
-/** The period the figures are worked out over: this month, by default. */
-export function currentMonth() {
-  const now = new Date()
-  const first = new Date(now.getFullYear(), now.getMonth(), 1)
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  const iso = (date) => date.toISOString().slice(0, 10)
-  return { from: iso(first), to: iso(last) }
+/**
+ * A date as YYYY-MM-DD in the browser's own timezone.
+ *
+ * `toISOString()` cannot be used for this: midnight local in IST is 18:30 the
+ * previous day in UTC, so 1 October comes back as 30 September and every period
+ * is off by a day at its edges.
+ */
+export const isoDate = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+export const today = () => isoDate(new Date())
+
+/* ── the books: 1 April to 31 March ──────────────────────────────────── */
+
+/** April, zero-based — the month the client's financial year opens on. */
+export const FY_START_MONTH = 3
+
+/** Which financial year a date falls in, named after the April it opened. */
+export const fiscalYearOf = (date = new Date()) =>
+  date.getMonth() >= FY_START_MONTH ? date.getFullYear() : date.getFullYear() - 1
+
+/** 2026 → "2026–27", the way the books are labelled. */
+export const fiscalYearLabel = (year) => `${year}–${String((year + 1) % 100).padStart(2, '0')}`
+
+/** The last few years to choose from, newest first. */
+export const fiscalYearOptions = (back = 5) => {
+  const current = fiscalYearOf()
+  return Array.from({ length: back }, (_, i) => current - i).map((year) => ({
+    value: String(year),
+    label: fiscalYearLabel(year),
+  }))
 }
 
-export const today = () => new Date().toISOString().slice(0, 10)
+/** April … March, in the order the books run. '' is the whole year. */
+export const FY_MONTHS = [
+  { value: '', label: 'Whole year' },
+  ...Array.from({ length: 12 }, (_, i) => {
+    const month = (FY_START_MONTH + i) % 12
+    return { value: String(month), label: new Date(2000, month, 1).toLocaleString('en-IN', { month: 'long' }) }
+  }),
+]
+
+/**
+ * The window a year and month cover. A month gives that month; no month gives
+ * the whole financial year, 1 April to 31 March.
+ *
+ * This is what makes the four figures read the way the client expects: inside a
+ * month, last month's closing is the opening; across a year, last year's
+ * closing is the opening and everything produced during the year counts as in.
+ */
+export function periodFor({ year, month }) {
+  const start = Number(year)
+
+  if (month === '' || month === null || month === undefined) {
+    return { from: isoDate(new Date(start, FY_START_MONTH, 1)), to: isoDate(new Date(start + 1, FY_START_MONTH, 0)) }
+  }
+
+  const index = Number(month)
+  // January to March belong to the second half of the financial year.
+  const calendarYear = index >= FY_START_MONTH ? start : start + 1
+  return { from: isoDate(new Date(calendarYear, index, 1)), to: isoDate(new Date(calendarYear, index + 1, 0)) }
+}
+
+/** What the screens open on: this month, in this financial year. */
+export const currentPeriod = () => ({ year: String(fiscalYearOf()), month: String(new Date().getMonth()) })
 
 export const EXPIRY_FILTERS = [
   { value: 'EXPIRED', label: 'Expired' },
@@ -55,10 +110,14 @@ export function validateBatchForm(form) {
   if (!form.quantity) errors.quantity = 'Enter how much was made.'
   else if (!isNumber(form.quantity) || Number(form.quantity) <= 0) errors.quantity = 'Enter a quantity above 0.'
 
-  if (form.mfgDate && form.expiryDate && form.expiryDate <= form.mfgDate) {
+  // Everything is required except the note and the date it was entered.
+  if (!form.mfgDate) errors.mfgDate = 'Enter the manufacturing date.'
+  else if (form.mfgDate > today()) errors.mfgDate = 'Can’t be in the future.'
+
+  if (!form.expiryDate) errors.expiryDate = 'Enter the expiry date.'
+  else if (form.mfgDate && form.expiryDate <= form.mfgDate) {
     errors.expiryDate = 'Expiry must be after the manufacturing date.'
   }
-  if (form.mfgDate && form.mfgDate > today()) errors.mfgDate = 'Can’t be in the future.'
 
   return errors
 }

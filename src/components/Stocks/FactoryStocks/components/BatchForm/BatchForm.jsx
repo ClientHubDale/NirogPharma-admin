@@ -71,6 +71,7 @@ export function BatchForm({ form, errors, items, onChange, editing }) {
       <TextField
         id="batch-mfg"
         label="Manufactured on"
+        required
         size="md"
         type="date"
         max={today()}
@@ -81,6 +82,7 @@ export function BatchForm({ form, errors, items, onChange, editing }) {
       <TextField
         id="batch-expiry"
         label="Expires on"
+        required
         size="md"
         type="date"
         value={form.expiryDate}
@@ -88,9 +90,10 @@ export function BatchForm({ form, errors, items, onChange, editing }) {
         error={errors.expiryDate}
       />
 
+      {/* The two the client left optional: when it was entered, and why. */}
       <TextField
         id="batch-received"
-        label="Entered stock on"
+        label="Entered stock on (optional)"
         size="md"
         type="date"
         max={today()}
@@ -101,7 +104,7 @@ export function BatchForm({ form, errors, items, onChange, editing }) {
 
       <TextAreaField
         id="batch-note"
-        label="Note"
+        label="Note (optional)"
         rows={2}
         maxLength={240}
         placeholder="Anything worth recording about this batch"

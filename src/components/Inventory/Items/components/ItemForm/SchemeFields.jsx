@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
+import { ImageUploader } from '@/components/form/ImageUploader'
 import { SelectField } from '@/components/form/SelectField'
 import { TextField } from '@/components/form/TextField'
 import { UNITS } from '@/mocks/items'
@@ -121,7 +122,16 @@ export function SchemeFields({ form, errors, items, gifts = [], onChange, onAddG
         />
       </div>
 
-      <p className="mt-2 text-xs text-ink-muted">{sentence}</p>
+      <div className="mt-2 flex items-center gap-2.5">
+        {free?.imageUrl && (
+          <img
+            src={free.imageUrl}
+            alt=""
+            className="size-10 shrink-0 rounded-lg border border-mint-pale object-cover"
+          />
+        )}
+        <p className="text-xs text-ink-muted">{sentence}</p>
+      </div>
     </div>
   )
 }
@@ -133,13 +143,14 @@ export function SchemeFields({ form, errors, items, gifts = [], onChange, onAddG
 function NewGift({ onCancel, onAdd, onPicked }) {
   const [name, setName] = useState('')
   const [unit, setUnit] = useState('PCS')
+  const [image, setImage] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const submit = async () => {
     if (!name.trim()) return setError('Enter a name.')
     setBusy(true)
-    const result = await onAdd({ name: name.trim(), unit })
+    const result = await onAdd({ name: name.trim(), unit, image })
     setBusy(false)
     if (typeof result === 'string') return setError(result)
     onPicked(result.id)
@@ -185,7 +196,12 @@ function NewGift({ onCancel, onAdd, onPicked }) {
           </button>
         </div>
       </div>
-      <p className="mt-2.5 text-xs text-ink-muted">
+      {/* The staff handing it over have to recognise it. */}
+      <div className="mt-3 grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <ImageUploader label="Picture" images={image} onChange={setImage} max={1} onError={setError} />
+      </div>
+
+      <p className="mt-1 text-xs text-ink-muted">
         Not a catalogue item: it has no price and nothing comes out of factory stock when you give one away.
       </p>
       {error && <p className="mt-1.5 text-sm font-medium text-destructive">{error}</p>}

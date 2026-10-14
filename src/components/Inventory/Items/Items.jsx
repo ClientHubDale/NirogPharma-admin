@@ -29,7 +29,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { parseCSV } from '@/lib/csv'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
-import { CATEGORY_QUANTITY_UNITS, INITIAL_CATEGORIES, ITEM_STATUSES, WAREHOUSES } from '@/mocks/items'
+import { CATEGORY_QUANTITY_UNITS, INITIAL_CATEGORIES, ITEM_STATUSES, UNITS, WAREHOUSES } from '@/mocks/items'
 import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { addPriceTier, removePriceTier } from '@/store/priceTiersSlice'
 import { addGift as addGiftThunk } from '@/store/giftsSlice'
@@ -67,6 +67,9 @@ export default function Items() {
   // Categories the admin added this session, as { name: quantity unit }. There
   // is no category table yet, so the rest is rebuilt from the catalogue below.
   const [addedCategories, setAddedCategories] = useState({})
+  // Units the admin added this session. Like categories, the rest is rebuilt
+  // from the catalogue below, so one saved item keeps a new unit alive.
+  const [addedUnits, setAddedUnits] = useState([])
 
   // List controls.
   const [search, setSearch] = useState('')
@@ -135,6 +138,11 @@ export default function Items() {
     return { ...units, ...addedCategories }
   }, [items, addedCategories])
 
+  const units = useMemo(() => {
+    const all = [...UNITS.map((unit) => unit.value), ...items.map((item) => item.unit), ...addedUnits]
+    return [...new Set(all.filter(Boolean))]
+  }, [items, addedUnits])
+
   const categories = useMemo(() => {
     const all = [...INITIAL_CATEGORIES, ...items.map((item) => item.category), ...Object.keys(addedCategories)]
     return [...new Set(all.filter(Boolean))].sort((a, b) => a.localeCompare(b))
@@ -189,10 +197,16 @@ export default function Items() {
    * of the catalogue entirely and nothing is deducted from stock when one goes
    * out. Returns the new giveaway, or the reason it could not be saved.
    */
-  const addGift = async ({ name, unit }) => {
-    const result = await dispatch(addGiftThunk({ name, unit }))
+  const addGift = async ({ name, unit, image }) => {
+    const result = await dispatch(addGiftThunk({ name, unit, image }))
     if (addGiftThunk.rejected.match(result)) return result.payload.message
-    toast({ tone: 'success', title: 'Giveaway added', description: `${name} · not from stock` })
+
+    const { warning } = result.payload
+    toast({
+      tone: warning ? 'warning' : 'success',
+      title: 'Giveaway added',
+      description: warning ? `${name} · ${warning}` : `${name} · not from stock`,
+    })
     return result.payload.gift
   }
 
@@ -478,7 +492,9 @@ export default function Items() {
           onChange={updateField}
           categories={categories}
           categoryUnits={categoryUnits}
+          units={units}
           onAddCategory={(name, unit) => setAddedCategories((c) => ({ ...c, [name]: unit }))}
+          onAddUnit={(code) => setAddedUnits((list) => [...list, code])}
           items={items}
           onAddGift={addGift}
           onAddTier={addTier}

@@ -10,7 +10,6 @@ import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { SearchSelect } from '@/components/form/SearchSelect'
-import { TextField } from '@/components/form/TextField'
 import { fetchDistributors, selectDistributors } from '@/store/distributorsSlice'
 import {
   fetchBatches,
@@ -23,7 +22,7 @@ import {
 } from '@/store/stockSlice'
 import { buildHoldingColumns } from './components/HoldingsTable'
 import { MoveForm } from '../components/MoveForm'
-import { currentMonth, emptyMoveForm, validateMoveForm } from '../stockModel'
+import { currentPeriod, emptyMoveForm, fiscalYearOptions, FY_MONTHS, periodFor, validateMoveForm } from '../stockModel'
 
 const PAGE_SIZE = 20
 
@@ -45,19 +44,20 @@ export default function DistributorStocks() {
 
   const [search, setSearch] = useState('')
   const [distributorId, setDistributorId] = useState('')
-  const [period, setPeriod] = useState(currentMonth)
+  // The same books as the factory screen: 1 April to 31 March.
+  const [period, setPeriod] = useState(currentPeriod)
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [returning, setReturning] = useState(null) // { form, errors, row }
   const [saving, setSaving] = useState(false)
 
   const resetPage = () => setPagination((p) => ({ ...p, pageIndex: 0 }))
-  const load = () => dispatch(fetchDistributorStock({ from: period.from, to: period.to }))
+  const load = () => dispatch(fetchDistributorStock(periodFor(period)))
 
   useEffect(() => {
-    dispatch(fetchDistributorStock({ from: period.from, to: period.to }))
+    dispatch(fetchDistributorStock(periodFor(period)))
     dispatch(fetchDistributors())
     dispatch(fetchBatches({}))
-  }, [dispatch, period.from, period.to])
+  }, [dispatch, period])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -165,27 +165,30 @@ export default function DistributorStocks() {
             }}
             className="sm:w-56"
           />
-          <div className="flex items-center gap-2">
-            <TextField
-              id="holding-from"
-              aria-label="Period from"
-              size="md"
-              type="date"
-              value={period.from}
-              onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))}
-              className="w-40"
-            />
-            <span className="text-sm text-ink-muted">to</span>
-            <TextField
-              id="holding-to"
-              aria-label="Period to"
-              size="md"
-              type="date"
-              value={period.to}
-              onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))}
-              className="w-40"
-            />
-          </div>
+          <SearchSelect
+            aria-label="Financial year"
+            placeholder="Year"
+            searchable={false}
+            options={fiscalYearOptions()}
+            value={period.year}
+            onChange={(v) => {
+              setPeriod((p) => ({ ...p, year: v || p.year }))
+              resetPage()
+            }}
+            className="sm:w-36"
+          />
+          <SearchSelect
+            aria-label="Month"
+            placeholder="Whole year"
+            searchable={false}
+            options={FY_MONTHS}
+            value={period.month}
+            onChange={(v) => {
+              setPeriod((p) => ({ ...p, month: v ?? '' }))
+              resetPage()
+            }}
+            className="sm:w-40"
+          />
           <Pagination
             pageIndex={page.pageIndex}
             pageSize={page.pageSize}

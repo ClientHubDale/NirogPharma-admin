@@ -9,9 +9,22 @@ export async function listGifts() {
   return data.data.gifts
 }
 
-export async function createGift({ name, unit }) {
-  const { data } = await api.post('/gifts', { name, unit })
-  return { gift: data.data.gift, message: data.message }
+/** A new picture is a File (what ImageUploader keeps), which needs multipart. */
+export async function createGift({ name, unit, image }) {
+  const file = image?.find((picture) => picture.file)?.file
+
+  let body = { name, unit }
+  let headers
+  if (file) {
+    body = new FormData()
+    body.append('name', name)
+    body.append('unit', unit)
+    body.append('image', file, file.name)
+    headers = { 'Content-Type': undefined }
+  }
+
+  const { data } = await api.post('/gifts', body, { headers })
+  return { gift: data.data.gift, warning: data.data.warning, message: data.message }
 }
 
 export async function deleteGift(id) {

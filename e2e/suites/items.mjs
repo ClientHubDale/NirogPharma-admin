@@ -105,7 +105,16 @@ await sleep(300)
 ok('with no MRP the prices read as —', (await page.$$eval('#item-tier-MRP', (els) => els.length)) === 0)
 
 await page.type('#item-name', ITEM.name)
-// The unit is the only other thing required before the item can be saved.
+
+// A unit the list does not have yet. It is typed here and selected straight away.
+await page.click('button[aria-label="Add unit"]')
+await page.waitForSelector('input[aria-label="e.g. SACHET"]')
+await page.type('input[aria-label="e.g. SACHET"]', 'sachet')
+await page.click('button[aria-label="Add"]')
+await sleep(500)
+has('a new unit is added and chosen', await page.$eval('#item-unit', (el) => el.textContent), 'SACHET')
+
+// Back to a real one for the rest of the run.
 await page.click('#item-unit')
 await page.waitForSelector('[role=listbox]')
 await sleep(300)
@@ -282,6 +291,7 @@ has('the buy quantity is counted in the item\'s own unit', await unitBeside('#it
 await page.click('button[aria-label="Add free item"]')
 await page.waitForSelector('#gift-name')
 await page.type('#gift-name', 'E2E Pen')
+ok('a giveaway can carry a picture', (await page.$('#gift-name')) !== null && (await pageText(page)).includes('Picture'))
 await sleep(300)
 await clickText(page, 'button', 'Add giveaway')
 await page.waitForFunction(() => !document.querySelector('#gift-name'), { timeout: 15000 }).catch(() => {})
