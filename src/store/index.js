@@ -4,6 +4,7 @@ import authReducer, { sessionEnded } from './authSlice'
 import distributorsReducer from './distributorsSlice'
 import geographyReducer from './geographySlice'
 import giftsReducer from './giftsSlice'
+import invoicesReducer from './invoicesSlice'
 import itemsReducer from './itemsSlice'
 import partiesReducer from './partiesSlice'
 import priceListsReducer from './priceListsSlice'
@@ -21,6 +22,7 @@ export const store = configureStore({
   reducer: {
     auth: authReducer,
     items: itemsReducer,
+    invoices: invoicesReducer,
     schemes: schemesReducer,
     priceLists: priceListsReducer,
     priceTiers: priceTiersReducer,

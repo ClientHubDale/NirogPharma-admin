@@ -34,6 +34,8 @@ import {
   DAY_LABEL,
   distributorToForm,
   emptyDistributorForm,
+  PARTY_TYPE_LABEL,
+  PARTY_TYPES,
   placeOf,
   validateDistributorForm,
 } from './distributorModel'
@@ -62,6 +64,7 @@ export default function Distributors() {
   const [managerId, setManagerId] = useState('')
   const [executiveId, setExecutiveId] = useState('')
   const [cityId, setCityId] = useState('')
+  const [partyType, setPartyType] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 })
   const [drawer, setDrawer] = useState(null) // { form, initial, errors, editingId }
   const [saving, setSaving] = useState(false)
@@ -103,9 +106,10 @@ export default function Distributors() {
       if (managerId && d.managerId !== managerId) return false
       if (executiveId && !(d.executiveIds ?? []).includes(executiveId)) return false
       if (cityId && d.cityId !== cityId) return false
+      if (partyType && d.partyType !== partyType) return false
       return !q || `${d.name} ${d.mobile} ${d.altMobile} ${d.contactPerson}`.toLowerCase().includes(q)
     })
-  }, [distributors, search, managerId, executiveId, cityId])
+  }, [distributors, search, managerId, executiveId, cityId, partyType])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pagination.pageSize))
   const page = pagination.pageIndex < pageCount ? pagination : { ...pagination, pageIndex: pageCount - 1 }
@@ -242,6 +246,10 @@ export default function Distributors() {
               </a>
             ),
         }),
+        helper.accessor('partyType', {
+          header: 'Kind',
+          cell: (i) => <StatusPill tone={i.getValue() === 'DISTRIBUTOR' ? 'neutral' : 'info'}>{PARTY_TYPE_LABEL[i.getValue()] ?? '—'}</StatusPill>,
+        }),
         helper.accessor('priceTier', {
           header: 'Price Tier',
           cell: (i) => <StatusPill tone="info">{tierLabel[i.getValue()] ?? i.getValue() ?? '—'}</StatusPill>,
@@ -344,6 +352,19 @@ export default function Distributors() {
               resetPage()
             }}
             className="sm:w-48"
+          />
+          <SearchSelect
+            aria-label="Filter by kind"
+            placeholder="Any kind"
+            clearable
+            searchable={false}
+            options={PARTY_TYPES}
+            value={partyType}
+            onChange={(v) => {
+              setPartyType(v)
+              resetPage()
+            }}
+            className="sm:w-44"
           />
           <SearchSelect
             aria-label="Filter by city"

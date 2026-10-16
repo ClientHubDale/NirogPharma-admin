@@ -28,7 +28,8 @@ const Visited = lazy(() => import('@/components/Parties/Visited/Visited'))
 const Distributors = lazy(() => import('@/components/Parties/Distributors/Distributors'))
 const Estimates = lazy(() => import('@/components/Sales/Estimates/Estimates'))
 const SalesOrders = lazy(() => import('@/components/Sales/SalesOrders/SalesOrders'))
-const SalesInvoices = lazy(() => import('@/components/Sales/SalesInvoices/SalesInvoices'))
+const SalesInvoices = lazy(() => import('@/components/Sales/Invoices/Invoices'))
+const InvoiceEditor = lazy(() => import('@/components/Sales/Invoices/InvoiceEditor'))
 const DeliveryChallans = lazy(() => import('@/components/Sales/DeliveryChallans/DeliveryChallans'))
 const SalesReturns = lazy(() => import('@/components/Sales/SalesReturns/SalesReturns'))
 const CreditNotes = lazy(() => import('@/components/Sales/CreditNotes/CreditNotes'))
@@ -141,6 +142,8 @@ export function AppRouter() {
             <Route path="/admin/inventory/schemes/:schemeId/edit" element={<Lazy page={SchemeEditor} />} />
             <Route path="/admin/inventory/price-lists/new" element={<Lazy page={PriceListEditor} />} />
             <Route path="/admin/inventory/price-lists/:priceListId/edit" element={<Lazy page={PriceListEditor} />} />
+            <Route path="/admin/sales/invoices/new" element={<Lazy page={InvoiceEditor} />} />
+            <Route path="/admin/sales/invoices/:invoiceId/edit" element={<Lazy page={InvoiceEditor} />} />
             {salesEditorRoutes()}
             <Route path="/admin/attendance/:userId" element={<Lazy page={UserAttendance} />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />

@@ -199,20 +199,25 @@ await sleep(1200)
 await openItem(ITEM.name)
 await openRowMenu(`Actions for batch ${BATCH}`)
 await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-menu-item]')].find((el) => /issue/i.test(el.textContent)).click())
-await page.waitForSelector('#move-quantity')
+await page.waitForSelector('#issue-quantity-0')
 await sleep(500)
 
-has('the drawer says what the batch holds', await pageText(page), '500')
+// The bill the stock goes out on — typed from the paper, not generated.
+ok('the issue drawer asks for an invoice number', Boolean(await page.$('#move-invoice')))
+ok('and starts on the batch it was opened from', (await page.$eval('#issue-batch-0', (el) => el.textContent)).includes(BATCH))
+
 await pickOption(page, '#move-distributor', distributor.name)
 await sleep(300)
-await page.type('#move-quantity', '40')
+await page.type('#move-invoice', 'E2E-INV-1')
+await page.type('#issue-quantity-0', '40')
 await clickText(page, 'header button, footer button', 'Issue')
-await page.waitForFunction(() => !document.querySelector('#move-quantity'), { timeout: 15000 }).catch(() => {})
+await page.waitForFunction(() => !document.querySelector('#issue-quantity-0'), { timeout: 15000 }).catch(() => {})
 has('a toast confirms it went out', await waitForToast(page), 'Stock issued')
 await sleep(900)
 
 const afterIssue = (await api('/stocks/batches')).data.batches.find((b) => b.batchNo === BATCH)
 eq('the factory is down to 460', afterIssue?.available, 460)
+eq('and the movement carries the invoice number', (await api(`/stocks/batches/${afterIssue.id}/movements`)).data.movements[0].invoiceNo, 'E2E-INV-1')
 
 await goto(page, '/admin/stocks/distributor', { heading: 'Distributor Stocks' })
 await sleep(800)
@@ -248,6 +253,56 @@ const backHeld = (await api('/stocks/distributors')).data.rows.find((row) => row
 eq('they are left holding 25', backHeld?.held, 25)
 eq('the factory has 475 again', (await api('/stocks/batches')).data.batches.find((b) => b.batchNo === BATCH)?.available, 475)
 
+/* ── one bill, several batches ────────────────────────────────────────── */
+
+await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
+await sleep(900)
+await openItem(ITEM.name)
+await openRowMenu(`Actions for batch ${BATCH}`)
+await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-menu-item]')].find((el) => /issue/i.test(el.textContent)).click())
+await page.waitForSelector('#issue-quantity-0')
+await sleep(500)
+
+await pickOption(page, '#move-distributor', distributor.name)
+await page.type('#move-invoice', 'E2E-INV-2')
+await page.type('#issue-quantity-0', '10')
+
+// A second line on the same bill, for a batch of another product.
+const otherBatch = (await api('/stocks/batches')).data.batches.find((b) => b.itemId !== item.id && b.available > 20)
+await page.click('button[aria-label="Add another batch"]')
+await page.waitForSelector('#issue-batch-1')
+await sleep(300)
+await pickOption(page, '#issue-batch-1', otherBatch.itemName.slice(0, 14))
+await page.type('#issue-quantity-1', '5')
+await sleep(300)
+has('the bill says how many lines it carries', await pageText(page), '2 lines on this bill')
+
+await clickText(page, 'header button, footer button', 'Issue')
+await page.waitForFunction(() => !document.querySelector('#issue-quantity-0'), { timeout: 15000 }).catch(() => {})
+has('one toast for the whole bill', await waitForToast(page), '2 batches')
+await sleep(900)
+
+const both = (await api('/stocks/batches')).data.batches
+eq('the first batch went down by 10', both.find((b) => b.batchNo === BATCH)?.available, 465)
+eq('and the other by 5', both.find((b) => b.id === otherBatch.id)?.available, otherBatch.available - 5)
+
+/* ── the goes behind one total ────────────────────────────────────────── */
+
+await openItem(ITEM.name)
+await openRowMenu(`Actions for batch ${BATCH}`)
+await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-menu-item]')].find((el) => /movements/i.test(el.textContent)).click())
+await page.waitForSelector('[role=dialog]')
+// The ledger is fetched when the modal opens; wait for the rows, not a clock.
+await page.waitForFunction(() => document.querySelector('[role=dialog] tbody tr'), { timeout: 15000 })
+await sleep(300)
+const moves = await page.$eval('[role=dialog]', (el) => el.innerText)
+has('the movements list shows the first bill', moves, 'E2E-INV-1')
+has('and the second', moves, 'E2E-INV-2')
+has('with the distributor it went to', moves, distributor.name)
+has('and the production that started it', moves.toLowerCase(), 'produced')
+await page.keyboard.press('Escape')
+await sleep(500)
+
 /* ── one line per item, its batches underneath ────────────────────────── */
 
 // A second batch of the same product: the item must stay on one line.
@@ -272,7 +327,8 @@ await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
 await sleep(1500)
 
 const closed = await pageText(page)
-has('the item is one line, however many batches it has', closed, '2 batches')
+// Two batches exist, but the emptied one is gone — only the live one counts.
+has('the item is one line, counting only what is still in stock', closed, '1 batch')
 ok('and no batch number shows until it is opened', !closed.includes(BATCH) && !closed.includes('E2E-B-200'))
 
 const itemRow = await page.$eval('tbody', (body) => {
@@ -285,17 +341,27 @@ has('counted in the item unit', itemRow, 'BTL')
 await page.click('button[aria-label^="Show batches of E2E Stock Syrup"]')
 await sleep(900)
 const open = await pageText(page)
-has('opening the item lists its batches', open, BATCH)
-has('and the other one', open, 'E2E-B-200')
-// The pill is upper-cased by CSS, which innerText carries through.
-has('the finished batch is marked', open.toLowerCase(), 'finished')
+has('opening the item lists the batch that still has stock', open, 'E2E-B-200')
+ok('and the finished one is gone from the list entirely', !open.includes(BATCH))
 
-// Quantities stay on the item line; the batch lines carry number and expiry.
+// Each batch line carries its own four figures, so you can see which batch
+// holds what — the item line above is the total.
 const batchLine = await page.$eval('tbody', (body) => {
   const row = [...body.querySelectorAll('tr')].find((tr) => tr.innerText.includes('E2E-B-200'))
   return row.innerText.replace(/\s+/g, ' ').trim()
 })
-ok('a batch line is just the number and its expiry', !/\b60\b/.test(batchLine), batchLine)
+has('a batch line carries its own figures', batchLine, '60')
+
+// The item total is bold; the batch breakdown under it is light.
+const weights = await page.$$eval('tbody tr', (trs) => {
+  const pick = (text) => trs.find((tr) => tr.innerText.includes(text))
+  const weightOf = (tr) => {
+    const cell = [...tr.querySelectorAll('td')].find((td) => /^\s*60\s*$/.test(td.innerText) || /^\s*60\b/.test(td.innerText))
+    return cell ? getComputedStyle(cell.querySelector('span') ?? cell).fontWeight : ''
+  }
+  return { item: weightOf(pick('E2E Stock Syrup')), batch: weightOf(pick('E2E-B-200')) }
+})
+ok('the batch figures are lighter than the item total', Number(weights.batch) < 700, JSON.stringify(weights))
 
 /* ── every batch of one item, for the whole year ──────────────────────── */
 
@@ -306,7 +372,8 @@ await page.waitForSelector('[role=dialog]')
 await sleep(900)
 const historyText = await page.$eval('[role=dialog]', (el) => el.innerText)
 has('the item history opens for the whole year', historyText, '1 April to 31 March')
-has('and lists the finished batch too', historyText, BATCH)
+// The finished batch is off the main list, but the year's history still has it.
+has('and the finished batch is still in the history', historyText, BATCH)
 await page.keyboard.press('Escape')
 await sleep(500)
 
@@ -341,12 +408,15 @@ ok('the expiry filter keeps only items holding such a batch', onlyExpired.length
 
 await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
 await sleep(800)
-await pickOption(page, '[aria-label="Financial year"]', String(fyNow - 1))
+// Far enough back that nothing can have been entered there — last year may
+// legitimately hold stock someone back-dated.
+const quiet = fyNow - 5
+await pickOption(page, '[aria-label="Financial year"]', String(quiet))
 await pickOption(page, '[aria-label="Month"]', 'Whole year')
 await sleep(1200)
 
 const emptyYear = await pageText(page)
-has('an empty year names itself', emptyYear, `Nothing in ${fyNow - 1}–${String(fyNow % 100)}`)
+has('an empty year names itself', emptyYear, `Nothing in ${quiet}–${String((quiet + 1) % 100)}`)
 has('and says where the stock actually is', emptyYear, 'pick another year or month')
 ok('rather than claiming there is no stock at all', !emptyYear.includes('No stock yet'))
 

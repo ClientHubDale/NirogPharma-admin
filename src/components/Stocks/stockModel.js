@@ -27,8 +27,8 @@ export const fiscalYearOf = (date = new Date()) =>
 /** 2026 → "2026–27", the way the books are labelled. */
 export const fiscalYearLabel = (year) => `${year}–${String((year + 1) % 100).padStart(2, '0')}`
 
-/** The last few years to choose from, newest first. */
-export const fiscalYearOptions = (back = 5) => {
+/** The years to choose from, newest first — the client asked for ten. */
+export const fiscalYearOptions = (back = 10) => {
   const current = fiscalYearOf()
   return Array.from({ length: back }, (_, i) => current - i).map((year) => ({
     value: String(year),
@@ -77,6 +77,8 @@ export const EXPIRY_FILTERS = [
 /** Expiry is a warning, never a rule — this picks the colour, nothing else. */
 export const EXPIRY_TONE = { EXPIRED: 'danger', EXPIRING: 'warning', OK: 'neutral', NONE: 'neutral' }
 
+const isNumber = (value) => value !== '' && !Number.isNaN(Number(value))
+
 export const emptyBatchForm = (defaults = {}) => ({
   itemId: '',
   batchNo: '',
@@ -98,8 +100,6 @@ export const batchToForm = (batch) => ({
   receivedAt: batch.receivedAt ?? today(),
   note: batch.note ?? '',
 })
-
-const isNumber = (value) => value !== '' && !Number.isNaN(Number(value))
 
 /** Returns { field: message } — an empty object means valid. */
 export function validateBatchForm(form) {
@@ -126,10 +126,54 @@ export const emptyMoveForm = (defaults = {}) => ({
   distributorId: '',
   batchId: '',
   quantity: '',
+  invoiceNo: '',
   at: today(),
   note: '',
   ...defaults,
 })
+
+/**
+ * One bill, many lines. A real invoice carries ten or twenty items, and the
+ * client will not enter them one at a time — "22 आइटम होते हैं, तो 22 बार
+ * अपडेट करना पड़ेगा".
+ */
+export const emptyIssueForm = (defaults = {}) => ({
+  distributorId: '',
+  invoiceNo: '',
+  at: today(),
+  note: '',
+  lines: [{ batchId: '', quantity: '' }],
+  ...defaults,
+})
+
+/**
+ * `availableOf(batchId)` says what that batch still holds. A batch may appear
+ * on two lines of the same bill, so the check is against the running total.
+ */
+export function validateIssueForm(form, availableOf) {
+  const errors = { lines: [] }
+
+  if (!form.distributorId) errors.distributorId = 'Choose the distributor.'
+  if (form.at && form.at > today()) errors.at = 'Can’t be in the future.'
+
+  const taken = new Map()
+  form.lines.forEach((line, index) => {
+    const problem = {}
+    if (!line.batchId) problem.batchId = 'Choose the batch.'
+    if (!line.quantity) problem.quantity = 'Enter a quantity.'
+    else if (!isNumber(line.quantity) || Number(line.quantity) <= 0) problem.quantity = 'Enter a quantity above 0.'
+    else if (line.batchId) {
+      const already = taken.get(line.batchId) ?? 0
+      const left = Math.round((availableOf(line.batchId) - already) * 100) / 100
+      if (Number(line.quantity) > left) problem.quantity = `Only ${left} left.`
+      else taken.set(line.batchId, already + Number(line.quantity))
+    }
+    errors.lines[index] = Object.keys(problem).length ? problem : undefined
+  })
+
+  if (!errors.lines.some(Boolean)) delete errors.lines
+  return errors
+}
 
 /** `available` is what can go: the factory's holding, or theirs on a return. */
 export function validateMoveForm(form, available) {

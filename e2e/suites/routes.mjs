@@ -80,14 +80,15 @@ await page.click('button[aria-label="Clear selection"]')
 await sleep(400)
 eq('clearing the filter restores the list', (await rows(page)).length, cities.length)
 
-/* ── Areas: import/export controls, warehouse column, paging ──────────── */
+/* ── Areas: import/export controls, paging ────────────────────────────── */
 
 await goto(page, '/admin/routes/areas', { heading: 'Areas' })
 const areas = await rows(page)
 ok('areas are listed', areas.length > 0, `${areas.length} rows`)
 has('areas can be exported', await pageText(page), 'Export')
 has('areas can be imported', await pageText(page), 'Import')
-ok('an area carries its warehouse', (await pageText(page)).toLowerCase().includes('warehouse'))
+// Warehouses are gone from the whole panel — one factory, nothing to pick.
+ok('an area no longer carries a warehouse', !(await pageText(page)).toLowerCase().includes('warehouse'))
 
 const total = Number((await page.$eval('[aria-live=polite]', (el) => el.textContent.replace(/\s+/g, ' '))).match(/of (\d+)/)?.[1])
 ok('the pager knows the total', total >= areas.length, `total ${total}, page ${areas.length}`)

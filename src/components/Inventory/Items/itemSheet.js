@@ -5,7 +5,7 @@
  * our additions at the end (optional).
  */
 import { BUILT_IN_TIERS, hintFor } from '@/constants/priceTiers'
-import { UNITS, WAREHOUSES } from '@/mocks/items'
+import { UNITS } from '@/mocks/items'
 
 const UNIT_CODES = UNITS.map((u) => u.value)
 
@@ -27,7 +27,6 @@ export const itemSheetColumns = (tiers = BUILT_IN_TIERS) => [
   { key: 'weight', header: 'Weight', width: 10 },
   { key: 'conversionFactor', header: 'Multiplier', width: 11, numFmt: '0', note: 'How many Units are in one Sec Unit (e.g. 12).' },
   { key: 'secondaryUnit', header: 'Sec Unit', width: 10, list: UNIT_CODES, note: 'Bigger pack unit, e.g. BOX. Needs Multiplier.' },
-  { key: 'warehouse', header: 'Warehouse', width: 34, list: WAREHOUSES.map((w) => w.label), note: 'Where the opening stock is kept. Default: main warehouse.' },
   { key: 'status', header: 'Status', width: 10, list: ['Active', 'Draft'], note: 'Active (default) or Draft.' },
   // One column per rate column. Leave a cell empty and the price follows the
   // formula (MRP × the tier's multiplier); put a number in and that price is
@@ -79,7 +78,6 @@ export const ITEM_SAMPLE_ROWS = [
     weight: '10 g',
     conversionFactor: 10,
     secondaryUnit: 'BOX',
-    warehouse: WAREHOUSES[0].label,
     status: 'Active',
   },
   { name: 'Nirog Cough Syrup 60 ml', unit: 'BTL' },
@@ -90,7 +88,6 @@ export function itemsToSheetRows(items, tiers = BUILT_IN_TIERS) {
     ...item,
     gst: item.gst === null || item.gst === undefined ? '' : String(item.gst),
     openingStockDate: item.openingStockDate ? new Date(item.openingStockDate) : '',
-    warehouse: WAREHOUSES.find((w) => w.value === item.warehouseId)?.label ?? '',
     status: item.status === 'ACTIVE' ? 'Active' : 'Draft',
     // Only the item's own prices go out; a formula price is left blank so the
     // file round-trips without turning every row into a custom price.
@@ -186,7 +183,6 @@ export function rowsToItems(rawRows, existing, tiers = BUILT_IN_TIERS) {
 
     names.add(name.toLowerCase())
     if (code) codes.add(code.toLowerCase())
-    const warehouse = WAREHOUSES.find((w) => w.label.toLowerCase() === String(row.warehouse ?? '').trim().toLowerCase())
 
     items.push({
       id: `itm-imp-${Date.now()}-${index}`,
@@ -203,7 +199,6 @@ export function rowsToItems(rawRows, existing, tiers = BUILT_IN_TIERS) {
       openingStockDate,
       secondaryUnit,
       conversionFactor: secondaryUnit ? Math.floor(multiplier) : null,
-      warehouseId: warehouse?.value ?? WAREHOUSES[0].value,
       weight: String(row.weight ?? '').trim(),
       description: '',
       images: [],

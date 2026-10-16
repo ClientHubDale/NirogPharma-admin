@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Signpost } from 'lucide-react'
 import { useSelector } from 'react-redux'
-import { WAREHOUSES } from '@/mocks/items'
 import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
 import { selectParties } from '@/store/partiesSlice'
 import MasterListPage from '../shared/MasterListPage'
@@ -10,7 +9,7 @@ const norm = (s) => String(s ?? '').trim().toLowerCase()
 
 /**
  * Routes › Areas — the beats staff visit. An area belongs to a city (and so to
- * a region) and is served from one warehouse.
+ * a region).
  */
 const config = {
   kind: 'routes',
@@ -37,7 +36,6 @@ const config = {
         cityById,
         regionName,
         parties: [...customers, ...suppliers],
-        warehouseName: Object.fromEntries(WAREHOUSES.map((w) => [w.value, w.label])),
         cityName: (routeRow) => cityById[routeRow.cityId]?.name ?? '',
         regionOf: (routeRow) => regionName[cityById[routeRow.cityId]?.regionId] ?? '',
         regionOptions: regions.map((r) => ({ value: r.id, label: r.name })),
@@ -46,7 +44,7 @@ const config = {
   },
   searchText: (row, ctx) => `${row.name} ${ctx.cityName(row)} ${ctx.regionOf(row)}`,
   columns: (ctx) => [
-    { id: 'name', header: 'Name', value: (r) => r.name, sub: (r) => ctx.warehouseName[r.warehouseId] },
+    { id: 'name', header: 'Name', value: (r) => r.name },
     { id: 'city', header: 'City', value: (r) => ctx.cityName(r) },
     { id: 'region', header: 'Region', value: (r) => ctx.regionOf(r) },
   ],
@@ -64,7 +62,6 @@ const config = {
       options: ctx.cities.filter((c) => !filters.regionId || c.regionId === filters.regionId).map((c) => ({ value: c.id, label: c.name })),
       match: (row, value) => row.cityId === value,
     },
-    { id: 'warehouseId', label: 'Select Warehouse', options: WAREHOUSES, match: (row, value) => row.warehouseId === value },
   ],
   fields: (ctx, form) => [
     { id: 'regionId', type: 'select', label: 'Region', placeholder: 'Select Region', options: ctx.regionOptions, clears: ['cityId'] },
@@ -75,16 +72,14 @@ const config = {
       placeholder: 'Select City',
       options: ctx.cities.filter((c) => !form.regionId || c.regionId === form.regionId).map((c) => ({ value: c.id, label: c.name })),
     },
-    { id: 'warehouseId', type: 'select', label: 'Warehouse', placeholder: 'Select Warehouse', options: WAREHOUSES },
     { id: 'name', type: 'text', label: 'Name', placeholder: 'Name', full: true },
   ],
-  emptyForm: (filters) => ({ regionId: filters.regionId || '', cityId: filters.cityId || '', warehouseId: filters.warehouseId || WAREHOUSES[0].value, name: '' }),
-  toForm: (row) => ({ regionId: '', cityId: row.cityId, warehouseId: row.warehouseId, name: row.name }),
-  toRecord: (form, id) => ({ id, name: form.name.trim(), cityId: form.cityId, warehouseId: form.warehouseId }),
+  emptyForm: (filters) => ({ regionId: filters.regionId || '', cityId: filters.cityId || '', name: '' }),
+  toForm: (row) => ({ regionId: '', cityId: row.cityId, name: row.name }),
+  toRecord: (form, id) => ({ id, name: form.name.trim(), cityId: form.cityId }),
   validate: (form, { rows, editingId }) => {
     const e = {}
     if (!form.cityId) e.cityId = 'Choose a city.'
-    if (!form.warehouseId) e.warehouseId = 'Choose a warehouse.'
     if (!form.name.trim()) e.name = 'Enter a name.'
     else if (rows.some((r) => r.id !== editingId && r.cityId === form.cityId && norm(r.name) === norm(form.name))) e.name = 'This area already exists in that city.'
     return e
@@ -99,18 +94,16 @@ const config = {
     { key: 'name', header: 'Name', width: 26, required: true },
     { key: 'city', header: 'City', width: 20, required: true },
     { key: 'region', header: 'Region', width: 20 },
-    { key: 'warehouse', header: 'Warehouse', width: 34 },
   ],
   sampleRows: [
-    { name: 'Lawad', city: 'Meerut', region: 'Uttar Pradesh', warehouse: WAREHOUSES[0].label },
-    { name: 'Deoband', city: 'Saharanpur', region: 'Uttar Pradesh', warehouse: WAREHOUSES[1].label },
+    { name: 'Lawad', city: 'Meerut', region: 'Uttar Pradesh' },
+    { name: 'Deoband', city: 'Saharanpur', region: 'Uttar Pradesh' },
   ],
-  importRequiredNote: 'Name and City. The city must already exist under Routes › Cities. Warehouse defaults to the first one.',
+  importRequiredNote: 'Name and City. The city must already exist under Routes › Cities.',
   toSheetRow: (row, ctx) => ({
     name: row.name,
     city: ctx.cityName(row),
     region: ctx.regionOf(row),
-    warehouse: ctx.warehouseName[row.warehouseId] ?? '',
   }),
   fromSheet: (sheetRows, ctx) => {
     const records = []
@@ -125,8 +118,7 @@ const config = {
       const city = ctx.cities.find((c) => norm(c.name) === norm(cityText))
       if (!city) return skipped.push({ line, reason: `unknown City "${cityText}"` })
       if ([...existing, ...records].some((r) => r.cityId === city.id && norm(r.name) === norm(name))) return skipped.push({ line, reason: `"${name}" already exists in ${city.name}` })
-      const warehouse = WAREHOUSES.find((w) => norm(w.label) === norm(raw.warehouse))?.value ?? WAREHOUSES[0].value
-      records.push({ id: `rt-${Date.now()}-${i}`, name, cityId: city.id, warehouseId: warehouse })
+      records.push({ id: `rt-${Date.now()}-${i}`, name, cityId: city.id })
     })
     return { records, skipped }
   },

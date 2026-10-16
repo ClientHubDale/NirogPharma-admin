@@ -18,6 +18,18 @@ export const WEEK_DAYS = [
 
 export const DAY_LABEL = Object.fromEntries(WEEK_DAYS.map((d) => [d.value, d.label]))
 
+/**
+ * Not every firm on the books is a distributor: a few are doctors the factory
+ * sells to directly, and some are retail chemists. The kind is only there so
+ * each can be listed on its own.
+ */
+export const PARTY_TYPES = [
+  { value: 'DISTRIBUTOR', label: 'Distributor' },
+  { value: 'DOCTOR', label: 'Doctor (direct)' },
+  { value: 'CHEMIST', label: 'Retail chemist' },
+]
+export const PARTY_TYPE_LABEL = Object.fromEntries(PARTY_TYPES.map((t) => [t.value, t.label]))
+
 export const DISTRIBUTOR_STATUSES = [
   { value: 'ACTIVE', label: 'Active' },
   { value: 'INACTIVE', label: 'Inactive' },
@@ -45,6 +57,9 @@ export const emptyDistributorForm = () => ({
   weeklyOff: '',
   target: '',
   priceTier: DEFAULT_PRICE_TIER,
+  partyType: 'DISTRIBUTOR',
+  state: 'UP',
+  pincode: '',
   status: 'ACTIVE',
   executiveId: '',
   shopPhoto: [],

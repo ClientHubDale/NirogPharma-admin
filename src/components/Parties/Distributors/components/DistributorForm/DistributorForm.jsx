@@ -4,6 +4,7 @@ import { LocationField } from '@/components/form/LocationField'
 import { SelectField } from '@/components/form/SelectField'
 import { TextAreaField } from '@/components/form/TextAreaField'
 import { TextField } from '@/components/form/TextField'
+import { PARTY_TYPES } from '../../distributorModel'
 import { tierOptions } from '@/constants/priceTiers'
 import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { DISTRIBUTOR_STATUSES, WEEK_DAYS } from '../../distributorModel'
@@ -194,6 +195,38 @@ export function DistributorForm({ form, errors, onChange, managers, executives, 
       </FormSection>
 
       <FormSection title="Trade Terms" description="The rate they buy on, the credit they get and what they are expected to sell.">
+        <SelectField
+          id="dist-party-type"
+          label="Kind"
+          required
+          searchable={false}
+          options={PARTY_TYPES}
+          value={form.partyType}
+          onChange={(v) => onChange('partyType', v)}
+          error={errors.partyType}
+        />
+        {/* The state decides CGST + SGST or IGST on a bill; the pin code prints on it. */}
+        <TextField
+          id="dist-state"
+          label="State"
+          size="md"
+          placeholder="UP"
+          maxLength={30}
+          value={form.state}
+          onChange={(e) => onChange('state', e.target.value.toUpperCase())}
+          error={errors.state}
+        />
+        <TextField
+          id="dist-pincode"
+          label="Pin code"
+          size="md"
+          inputMode="numeric"
+          maxLength={6}
+          placeholder="250001"
+          value={form.pincode}
+          onChange={(e) => onChange('pincode', e.target.value.replace(/\D/g, ''))}
+          error={errors.pincode}
+        />
         <SelectField
           id="dist-price-tier"
           label="Price tier"

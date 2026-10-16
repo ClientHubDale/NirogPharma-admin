@@ -1,9 +1,10 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { ChevronDown, ChevronRight, CornerDownRight, Layers, Pencil, Send, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CornerDownRight, History, Layers, Pencil, Send, Trash2 } from 'lucide-react'
 import { listFeatures } from '@/components/data/DataTable'
 import { RowActions } from '@/components/data/RowActions'
 import { StatusPill } from '@/components/data/StatusPill'
 import { initialsOf } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { EXPIRY_TONE } from '../../../stockModel'
 
 const helper = createColumnHelper(listFeatures)
@@ -30,8 +31,20 @@ const qty = (value) => (Number(value) ? Number(value).toLocaleString('en-IN') : 
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
-/** Only the batch lines carry a quantity cell; the item line carries the total. */
-const itemOnly = (render) => (context) => (context.row.original.kind === 'item' ? render(context) : null)
+/**
+ * A figure cell. The item line carries the total and is **bold** — that is the
+ * stock figure; the batch lines underneath are the same four numbers broken up,
+ * in light type, "समझने के लिए".
+ */
+const figure = (field, tone = '') => ({ row }) => {
+  const value = qty(row.original[field])
+  const isItem = row.original.kind === 'item'
+  return (
+    <span className={cn('font-mono tabular-nums', isItem ? 'font-bold text-black' : 'font-normal text-ink-muted', !isItem && tone)}>
+      {value}
+    </span>
+  )
+}
 
 function ExpiryCell({ batch }) {
   if (!batch.expiryDate) return <span className="text-ink-muted">—</span>
@@ -50,7 +63,7 @@ function ExpiryCell({ batch }) {
  * lines underneath are the batch numbers and their expiry dates, the finished
  * ones among them marked as such.
  */
-export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, expanded, onToggle }) {
+export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, onLedger, expanded, onToggle }) {
   return helper.columns([
     helper.accessor('itemName', {
       id: 'item',
@@ -77,10 +90,13 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, ex
         )
       },
     }),
-    helper.accessor('category', { header: 'Category', cell: itemOnly((info) => info.getValue() || '—') }),
+    helper.accessor('category', {
+      header: 'Category',
+      cell: ({ row }) => (row.original.kind === 'item' ? row.original.category || '—' : null),
+    }),
     helper.accessor('unit', {
       header: 'Unit',
-      cell: itemOnly((info) => <span className="font-mono text-xs">{info.getValue() || '—'}</span>),
+      cell: ({ row }) => (row.original.kind === 'item' ? <span className="font-mono text-xs">{row.original.unit || '—'}</span> : null),
     }),
     helper.accessor('batchNo', {
       // Sorting would wrap the header in a button, and this column expands.
@@ -89,17 +105,12 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, ex
       cell: ({ row }) => {
         const entry = row.original
         if (entry.kind === 'batch') {
-          return (
-            <span className="flex items-center gap-2">
-              <span className="font-mono text-sm font-semibold text-black">{entry.batchNo}</span>
-              {entry.closing <= 0 && (
-                <span className="rounded-full bg-bg px-2 py-0.5 text-[0.65rem] font-bold tracking-wide text-ink-muted uppercase">
-                  Finished
-                </span>
-              )}
-            </span>
-          )
+          return <span className="font-mono text-sm text-ink">{entry.batchNo}</span>
         }
+
+        // Nothing left in any batch: the figures still stand, but there is
+        // nothing to open.
+        if (entry.batches.length === 0) return <span className="text-ink-muted">—</span>
 
         const open = expanded.has(entry.itemId)
         return (
@@ -123,30 +134,21 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, ex
       header: 'Expiry',
       cell: ({ row }) => (row.original.kind === 'batch' ? <ExpiryCell batch={row.original} /> : null),
     }),
-    helper.accessor('opening', {
-      header: 'Opening',
-      meta: { align: 'right' },
-      cell: itemOnly((info) => <span className="font-mono tabular-nums">{qty(info.getValue())}</span>),
-    }),
-    helper.accessor('in', {
-      header: 'In',
-      meta: { align: 'right' },
-      cell: itemOnly((info) => <span className="font-mono tabular-nums text-green-deep">{qty(info.getValue())}</span>),
-    }),
-    helper.accessor('out', {
-      header: 'Out',
-      meta: { align: 'right' },
-      cell: itemOnly((info) => <span className="font-mono tabular-nums text-ink-muted">{qty(info.getValue())}</span>),
-    }),
+    helper.accessor('opening', { header: 'Opening', meta: { align: 'right' }, cell: figure('opening') }),
+    helper.accessor('in', { header: 'In', meta: { align: 'right' }, cell: figure('in', 'text-green-deep/80') }),
+    helper.accessor('out', { header: 'Out', meta: { align: 'right' }, cell: figure('out') }),
     helper.accessor('closing', {
       header: 'Closing',
       meta: { align: 'right' },
-      cell: itemOnly(({ row }) => (
-        <span className="inline-flex flex-col items-end">
-          <span className="font-mono font-semibold text-black tabular-nums">{qty(row.original.closing)}</span>
-          <span className="text-xs text-ink-muted">{row.original.unit}</span>
-        </span>
-      )),
+      cell: ({ row }) =>
+        row.original.kind === 'item' ? (
+          <span className="inline-flex flex-col items-end">
+            <span className="font-mono font-bold text-black tabular-nums">{qty(row.original.closing)}</span>
+            <span className="text-xs font-normal text-ink-muted">{row.original.unit}</span>
+          </span>
+        ) : (
+          <span className="font-mono font-normal text-ink-muted tabular-nums">{qty(row.original.closing)}</span>
+        ),
     }),
     helper.display({
       id: 'actions',
@@ -161,6 +163,7 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, ex
             ? [
                 { label: 'Edit batch', icon: Pencil, onSelect: () => onEdit(entry) },
                 { label: 'Issue to distributor', icon: Send, onSelect: () => onIssue(entry) },
+                { label: 'Movements', icon: History, onSelect: () => onLedger(entry) },
                 { label: 'Delete batch', icon: Trash2, destructive: true, separatorBefore: true, onSelect: () => onDelete(entry) },
               ]
             : [{ label: 'All batches of this item', icon: Layers, onSelect: () => onItemHistory(entry) }]

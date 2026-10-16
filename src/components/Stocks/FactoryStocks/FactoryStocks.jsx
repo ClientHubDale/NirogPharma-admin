@@ -29,13 +29,13 @@ import {
 } from '@/store/stockSlice'
 import { BatchForm } from './components/BatchForm'
 import { buildBatchColumns, DEFAULT_BATCH_COLUMN_VISIBILITY } from './components/BatchesTable'
-import { MoveForm } from '../components/MoveForm'
+import { IssueForm } from '../components/IssueForm'
 import * as stockService from '@/services/stockService'
 import {
   batchToForm,
   currentPeriod,
   emptyBatchForm,
-  emptyMoveForm,
+  emptyIssueForm,
   EXPIRY_FILTERS,
   EXPIRY_TONE,
   fiscalYearLabel,
@@ -43,7 +43,7 @@ import {
   FY_MONTHS,
   periodFor,
   validateBatchForm,
-  validateMoveForm,
+  validateIssueForm,
 } from '../stockModel'
 
 const PAGE_SIZE = 20
@@ -88,6 +88,7 @@ export default function FactoryStocks() {
   const [period, setPeriod] = useState(currentPeriod)
   const [expanded, setExpanded] = useState(() => new Set()) // items whose batches are open
   const [history, setHistory] = useState(null) // { item, batches, loading }
+  const [ledger, setLedger] = useState(null) // { batch, movements, loading }
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [columnVisibility, setColumnVisibility] = useState(DEFAULT_BATCH_COLUMN_VISIBILITY)
   const [drawer, setDrawer] = useState(null) // { form, initial, errors, editingId, batch }
@@ -113,9 +114,12 @@ export default function FactoryStocks() {
   /**
    * One line per item, carrying that item's figures for the period, with its
    * batches gathered underneath — the client's "आइटम कैटेगरी यूनिट सिंगल लाइन,
-   * बैच मल्टिपल". An item is listed while it still holds stock or something
-   * moved during the period; a batch that is finished is kept, inside the
-   * expansion, because that is where you go to see what was made in it.
+   * बैच मल्टिपल".
+   *
+   * A batch with nothing left in it drops off: "फिनिश की जगह यहाँ पर दिखना ही
+   * नहीं चाहिए… 10 साल में हजारों बैच हो जायेंगे". Its movements still count
+   * towards the item's figures — the four columns are the period's accounting
+   * and have to add up — but it is no longer one of the lines you can open.
    */
   const itemRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -141,7 +145,8 @@ export default function FactoryStocks() {
       row.in += batch.in
       row.out += batch.out
       row.closing += batch.closing
-      row.batches.push({ ...batch, kind: 'batch', id: `batch:${batch.id}`, batchId: batch.id })
+      // Only what is still in the factory gets a line of its own.
+      if (batch.closing > 0) row.batches.push({ ...batch, kind: 'batch', id: `batch:${batch.id}`, batchId: batch.id })
       byItem.set(batch.itemId, row)
     }
 
@@ -194,6 +199,7 @@ export default function FactoryStocks() {
         onIssue: (batch) => openIssue(batch),
         onDelete: (batch) => destroy(batch),
         onItemHistory: (row) => openHistory(row),
+        onLedger: (batch) => openLedger(batch),
         expanded,
         onToggle: toggle,
       }),
@@ -268,19 +274,24 @@ export default function FactoryStocks() {
 
   /* ── issuing to a distributor ─────────────────────────── */
 
+  /** One bill, starting from the batch the admin opened it on. */
   const openIssue = (batch) => {
-    const form = emptyMoveForm({ batchId: batch.batchId ?? batch.id })
+    const form = emptyIssueForm({ lines: [{ batchId: batch?.batchId ?? batch?.id ?? '', quantity: '' }] })
     setIssuing({ form, initial: form, errors: {}, batch })
   }
 
   const issueField = (field, value) =>
     setIssuing((state) => ({ ...state, form: { ...state.form, [field]: value }, errors: { ...state.errors, [field]: undefined } }))
 
+  const availableOf = (batchId) => batches.find((row) => row.id === batchId)?.available ?? 0
+  const unitOf = (batchId) => batches.find((row) => row.id === batchId)?.unit ?? ''
+
   const confirmIssue = async () => {
-    const found = validateMoveForm(issuing.form, issuing.batch.available)
+    const found = validateIssueForm(issuing.form, availableOf)
     if (Object.keys(found).length) {
       setIssuing((state) => ({ ...state, errors: found }))
-      document.getElementById(FIELD_IDS[Object.keys(found)[0]])?.focus()
+      const first = Object.keys(found)[0]
+      document.getElementById(first === 'lines' ? `issue-quantity-${found.lines.findIndex(Boolean)}` : FIELD_IDS[first])?.focus()
       return
     }
 
@@ -295,14 +306,28 @@ export default function FactoryStocks() {
     }
 
     const to = distributors.find((row) => row.id === issuing.form.distributorId)
+    const lines = issuing.form.lines.filter((line) => line.batchId).length
+    const bill = issuing.form.invoiceNo ? ` · ${issuing.form.invoiceNo}` : ''
     setIssuing(null)
     load()
     dispatch(fetchStockSummary())
     toast({
       tone: 'success',
       title: 'Stock issued',
-      description: `${issuing.form.quantity} ${issuing.batch.unit} of ${issuing.batch.batchNo} → ${to?.name ?? 'distributor'}`,
+      description: `${lines} ${lines === 1 ? 'batch' : 'batches'} → ${to?.name ?? 'distributor'}${bill}`,
     })
+  }
+
+  /** Every go behind one batch's Out figure, with the bill each went on. */
+  const openLedger = async (batch) => {
+    const id = batch.batchId ?? batch.id
+    setLedger({ batch, movements: [], loading: true })
+    try {
+      const data = await stockService.listBatchMovements(id)
+      setLedger({ batch, movements: data.movements, loading: false })
+    } catch {
+      setLedger({ batch, movements: [], loading: false })
+    }
   }
 
   const batchOptions = batches.map((batch) => ({
@@ -469,8 +494,50 @@ export default function FactoryStocks() {
         saveHint={drawer?.editingId ? 'Change something first' : 'Fill the batch in first'}
         saveLabel={drawer?.editingId ? 'Save changes' : 'Save'}
       >
-        {drawer && <BatchForm form={drawer.form} errors={drawer.errors} items={items} onChange={updateField} editing={drawer.batch} />}
+        {drawer && <BatchForm form={drawer.form} errors={drawer.errors} items={items} onChange={updateField} />}
       </FormDrawer>
+
+      <Modal
+        open={Boolean(ledger)}
+        onOpenChange={(open) => !open && setLedger(null)}
+        title={ledger ? `${ledger.batch.itemName} · ${ledger.batch.batchNo}` : ''}
+        description="Every go in and out of this batch, newest first."
+        className="max-w-2xl"
+      >
+        {ledger?.loading ? (
+          <div className="grid min-h-40 place-items-center" role="status" aria-label="Loading movements">
+            <span className="size-7 animate-spin rounded-full border-3 border-mint border-t-green-deep" />
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-mint-pale text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
+                <th className="py-2 pr-3">Date</th>
+                <th className="py-2 pr-3">Invoice</th>
+                <th className="py-2 pr-3">Who</th>
+                <th className="py-2 text-right">Quantity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ledger?.movements.map((move) => (
+                <tr key={move.id} className="border-b border-mint-pale/70 last:border-0">
+                  <td className="py-2.5 pr-3 whitespace-nowrap">{move.at}</td>
+                  <td className="py-2.5 pr-3 font-mono text-xs">{move.invoiceNo || <span className="text-ink-muted">—</span>}</td>
+                  <td className="py-2.5 pr-3">
+                    {move.kind === 'IN' ? <span className="text-ink-muted">Produced</span> : move.distributorName || '—'}
+                  </td>
+                  <td className="py-2.5 text-right font-mono font-semibold tabular-nums">
+                    <span className={move.kind === 'OUT' ? 'text-ink' : 'text-green-deep'}>
+                      {move.kind === 'OUT' ? '−' : '+'}
+                      {move.quantity} {ledger.batch.unit}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Modal>
 
       <Modal
         open={Boolean(history)}
@@ -525,7 +592,7 @@ export default function FactoryStocks() {
         open={Boolean(issuing)}
         onOpenChange={(open) => !open && setIssuing(null)}
         title="Issue stock"
-        description={issuing ? `${issuing.batch.itemName} · ${issuing.batch.batchNo}` : ''}
+        description={issuing?.batch ? `Starting from ${issuing.batch.itemName} · ${issuing.batch.batchNo}` : 'One bill, as many batches as it carries.'}
         onSubmit={confirmIssue}
         saving={saving}
         saveDisabled={!changed(issuing)}
@@ -533,13 +600,12 @@ export default function FactoryStocks() {
         saveLabel="Issue"
       >
         {issuing && (
-          <MoveForm
+          <IssueForm
             form={issuing.form}
             errors={issuing.errors}
             distributors={distributors}
             batches={batchOptions}
-            available={issuing.batch.available}
-            unit={issuing.batch.unit}
+            unitOf={unitOf}
             onChange={issueField}
           />
         )}

@@ -13,7 +13,7 @@ import { emptyPartyForm, formToParty, nextPartyId, validatePartyForm } from '@/c
 import { PARTY_TYPES } from '@/components/Parties/shared/partyTypes'
 import { Button } from '@/components/ui/button'
 import { formatPrice } from '@/lib/format'
-import { INITIAL_CATEGORIES, WAREHOUSES } from '@/mocks/items'
+import { INITIAL_CATEGORIES } from '@/mocks/items'
 import { routeAdded, selectCities, selectRoutes } from '@/store/geographySlice'
 import { partySaved, selectParties } from '@/store/partiesSlice'
 import { selectPriceLists } from '@/store/priceListsSlice'
@@ -83,7 +83,6 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
           date: todayISO(),
           partyType: purchase ? 'SUPPLIER' : 'CUSTOMER',
           partyId: '',
-          warehouseId: WAREHOUSES[0].value,
           createdBy: 'admin',
           creditPeriodDays: '',
           status: config.defaultStatus,
@@ -274,7 +273,7 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
           onChange={setLines}
           itemOptions={itemOptions}
           onAddItem={addItem}
-          onNewItem={() => setItemDrawer({ form: emptyItemForm({ warehouseId: WAREHOUSES[0].value }), errors: {} })}
+          onNewItem={() => setItemDrawer({ form: emptyItemForm(), errors: {} })}
           errors={errors.lines}
           error={errors.items}
         />

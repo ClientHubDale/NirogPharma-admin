@@ -12,7 +12,7 @@ const SHOWN = 10
  * the dates on the carton. The quantity becomes the batch's first ledger
  * movement, which is why it cannot be changed once any of it has gone out.
  */
-export function BatchForm({ form, errors, items, onChange, editing }) {
+export function BatchForm({ form, errors, items, onChange }) {
   const set = (field) => (e) => onChange(field, e.target.value)
   const number = (field) => (e) => onChange(field, e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))
 
@@ -60,7 +60,6 @@ export function BatchForm({ form, errors, items, onChange, editing }) {
         value={form.quantity}
         onChange={number('quantity')}
         error={errors.quantity}
-        disabled={editing?.out > 0}
         suffix={
           <span className="flex h-full items-center border-l border-mint-pale bg-bg px-3.5 text-sm font-medium text-ink-muted">
             {item?.unit || '—'}

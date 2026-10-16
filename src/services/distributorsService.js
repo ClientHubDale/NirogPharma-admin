@@ -26,6 +26,9 @@ const FIELDS = [
   'weeklyOff',
   'target',
   'priceTier',
+  'partyType',
+  'state',
+  'pincode',
   'status',
 ]
 

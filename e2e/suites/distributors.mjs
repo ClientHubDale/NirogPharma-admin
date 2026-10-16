@@ -321,4 +321,17 @@ const left = await api('/distributors?limit=100')
 ok('the suite leaves nothing behind', !(left?.data?.distributors ?? []).some((d) => d.mobile === DIST.mobile))
 
 // The refused save and the refused delete make Chrome log their 400/409.
+/* ── distributor, doctor or chemist ───────────────────────────────────── */
+
+await goto(page, '/admin/parties/distributors', { heading: 'Distributors' })
+await sleep(800)
+const kinds = await pageText(page)
+has('the list says what kind each firm is', kinds, 'Distributor')
+ok('and can be filtered by kind', Boolean(await page.$('[aria-label="Filter by kind"]')))
+
+await pickOption(page, '[aria-label="Filter by kind"]', 'Doctor')
+await sleep(800)
+const onlyDoctors = await page.$$eval('tbody tr', (trs) => trs.map((tr) => tr.innerText))
+ok('filtering to doctors leaves only doctors', onlyDoctors.every((text) => /doctor/i.test(text)), String(onlyDoctors.length))
+
 await finish(browser, errors, { ignore: /status of (400|409)/ })

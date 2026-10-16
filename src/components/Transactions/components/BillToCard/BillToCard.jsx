@@ -5,7 +5,6 @@ import { TextField } from '@/components/form/TextField'
 import { STATE_NAME } from '@/constants/indianStates'
 import { formatPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { WAREHOUSES } from '@/mocks/items'
 import { balanceLabel } from '@/components/Parties/shared/partyModel'
 
 const PARTY_TYPES = [
@@ -88,7 +87,6 @@ export function BillToCard({ doc, set, errors, settings, config, partyOptions, p
           />
         )}
         {config.poNumber && <TextField id="doc-po" label="PO number" size="md" placeholder="Supplier's order no." value={doc.poNumber ?? ''} onChange={(e) => set('poNumber', e.target.value)} />}
-        <SelectField id="doc-warehouse" label="Warehouse" placeholder="Select warehouse" options={WAREHOUSES} value={doc.warehouseId} onChange={(v) => set('warehouseId', v)} />
         <SelectField id="doc-created-by" label="Created by" placeholder="Select user" options={userOptions} value={doc.createdBy} onChange={(v) => set('createdBy', v)} />
         {settings.vehicleNo && <TextField id="doc-vehicle" label="Vehicle No." size="md" placeholder="e.g. MP09 AB 1234" value={doc.vehicleNo} onChange={(e) => set('vehicleNo', e.target.value.toUpperCase())} />}
         {settings.ewayBillNo && (

@@ -72,6 +72,7 @@ await sleep(500)
 const form = await pageText(page)
 has('the form has a tier prices block', form, 'Tier prices')
 ok('and no Stock Details section', !form.includes('Stock Details'))
+ok('and nothing about warehouses', !form.toLowerCase().includes('warehouse'))
 
 // Dropped on 8 Oct: the distributor's price is the rate column, the counter
 // price is the MRP, and nothing else has a job.
@@ -85,7 +86,6 @@ for (const id of [
   // Stock is its own module; creating a product does not touch it.
   'item-stock',
   'item-opening-stock-date',
-  'item-warehouse',
   'item-weight',
   'item-secondary-unit',
   'item-conversion',
@@ -419,7 +419,12 @@ ok('items already in the catalogue got the new price', (anyItem?.tierPrices ?? [
 ok('a built-in column cannot be removed from here', await page.$eval('button[aria-label="Remove −50% −12%"]', (el) => el.disabled))
 
 await page.click('button[aria-label="Remove −20% −10%"]')
-await sleep(1200)
+// The row goes once the server answers and the catalogue reloads — wait for
+// the form, not for a clock.
+await page
+  .waitForFunction(() => document.querySelectorAll('[id^=item-tier-]').length === 4, { timeout: 15000 })
+  .catch(() => {})
+await sleep(300)
 eq('removing it puts the form back to four', (await page.$$('[id^=item-tier-]')).length, 4)
 eq('and the server is back to four', (await api('/price-tiers')).data.tiers.length, 4)
 

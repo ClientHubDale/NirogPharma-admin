@@ -1,12 +1,7 @@
 /**
  * MOCK DATA (UI phase) — item catalogue and its lookups.
- * Backend replacement: GET /items, /warehouses, /item-categories, /brands.
+ * Backend replacement: GET /items, /item-categories, /brands.
  */
-
-export const WAREHOUSES = [
-  { value: 'wh-meerut', label: 'Nirog Pharma Private Limited — Meerut' },
-  { value: 'wh-saharanpur', label: 'Saharanpur Depot' },
-]
 
 export const UNITS = [
   { value: 'PCS', label: 'PCS — Pieces' },

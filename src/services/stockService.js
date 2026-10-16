@@ -29,7 +29,13 @@ export async function deleteBatch(id) {
 
 export async function issueStock(body) {
   const { data } = await api.post('/stocks/issue', body)
-  return { batch: data.data.batch, message: data.message }
+  return { batches: data.data.batches, batch: data.data.batch, message: data.message }
+}
+
+/** The ledger behind one batch: every go, with its date and invoice number. */
+export async function listBatchMovements(batchId) {
+  const { data } = await api.get(`/stocks/batches/${batchId}/movements`)
+  return data.data
 }
 
 export async function returnStock(body) {

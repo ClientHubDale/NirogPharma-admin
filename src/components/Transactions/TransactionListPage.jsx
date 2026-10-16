@@ -18,7 +18,6 @@ import { presetRange } from '@/lib/dateRange'
 import { cn } from '@/lib/utils'
 import { formatINR } from '@/lib/format'
 import { buildWorkbook, downloadWorkbook } from '@/lib/xlsx'
-import { WAREHOUSES } from '@/mocks/items'
 import { PARTY_GROUPS } from '@/mocks/parties'
 import { selectCities, selectRoutes } from '@/store/geographySlice'
 import { selectParties } from '@/store/partiesSlice'
@@ -32,7 +31,7 @@ import { docTotals } from './transactionModel'
 
 const PAGE_SIZE = 20
 const getRowId = (d) => d.id
-const EMPTY_FILTERS = { routeId: '', warehouseId: '', partyGroup: '' }
+const EMPTY_FILTERS = { routeId: '', partyGroup: '' }
 const today = () => new Date().toISOString().slice(0, 10)
 
 /** List page shared by every sales document type (Estimates first). */
@@ -87,7 +86,6 @@ export default function TransactionListPage({ type }) {
       if (userId && r.createdBy !== userId) return false
       if (status && r.status !== status) return false
       if (filters.routeId && r.party?.routeId !== filters.routeId) return false
-      if (filters.warehouseId && r.warehouseId !== filters.warehouseId) return false
       if (filters.partyGroup && r.party?.groupId !== filters.partyGroup) return false
       if (!q) return true
       return r.number.toLowerCase().includes(q) || r.party?.name.toLowerCase().includes(q) || r.comment?.toLowerCase().includes(q) || r.lines.some((l) => l.name.toLowerCase().includes(q))
@@ -242,7 +240,6 @@ export default function TransactionListPage({ type }) {
               renderFilters={(draft, setDraft) => (
                 <>
                   <SelectField id="flt-route" label="Route" placeholder="Select route" clearable options={routeOptions} value={draft.routeId} onChange={(v) => setDraft('routeId', v)} />
-                  <SelectField id="flt-warehouse" label="Warehouse" placeholder="Select warehouse" clearable options={WAREHOUSES} value={draft.warehouseId} onChange={(v) => setDraft('warehouseId', v)} />
                   <SelectField id="flt-group" label="Party Group" placeholder="Select party group" clearable options={PARTY_GROUPS.filter((g) => g.value !== 'all')} value={draft.partyGroup} onChange={(v) => setDraft('partyGroup', v)} />
                 </>
               )}

@@ -29,7 +29,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { parseCSV } from '@/lib/csv'
 import { buildWorkbook, downloadWorkbook, readWorkbookRows } from '@/lib/xlsx'
-import { CATEGORY_QUANTITY_UNITS, INITIAL_CATEGORIES, ITEM_STATUSES, UNITS, WAREHOUSES } from '@/mocks/items'
+import { CATEGORY_QUANTITY_UNITS, INITIAL_CATEGORIES, ITEM_STATUSES, UNITS } from '@/mocks/items'
 import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { addPriceTier, removePriceTier } from '@/store/priceTiersSlice'
 import { addGift as addGiftThunk } from '@/store/giftsSlice'
@@ -74,7 +74,6 @@ export default function Items() {
   // List controls.
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [warehouse, setWarehouse] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [columnVisibility, setColumnVisibility] = useState(DEFAULT_ITEM_COLUMN_VISIBILITY)
   const [highlightId, setHighlightId] = useState(null)
@@ -96,17 +95,16 @@ export default function Items() {
           item.code?.toLowerCase().includes(q) ||
           item.category?.toLowerCase().includes(q) ||
           item.hsn?.includes(q)) &&
-        (!status || item.status === status) &&
-        (!warehouse || item.warehouseId === warehouse),
+        (!status || item.status === status),
     )
-  }, [items, search, status, warehouse])
+  }, [items, search, status])
 
   // Keep the page in range when rows disappear (delete, filter).
   const pageCount = Math.max(1, Math.ceil(filtered.length / pagination.pageSize))
   const page = pagination.pageIndex < pageCount ? pagination : { ...pagination, pageIndex: pageCount - 1 }
 
   const resetPage = () => setPagination((p) => ({ ...p, pageIndex: 0 }))
-  const hasFilters = Boolean(search || status || warehouse)
+  const hasFilters = Boolean(search || status)
 
   /* ── drawer ───────────────────────────────────────────── */
 
@@ -182,8 +180,7 @@ export default function Items() {
     if (!drawer.editingId) {
       setSearch('')
       setStatus('')
-      setWarehouse('')
-      resetPage()
+        resetPage()
     }
     toast({
       tone: warning ? 'warning' : 'success',
@@ -317,7 +314,6 @@ export default function Items() {
     // Categories from the file are picked up from the items themselves.
     setSearch('')
     setStatus('')
-    setWarehouse('')
     resetPage()
     setNotice({
       tone: 'success',
@@ -355,8 +351,7 @@ export default function Items() {
           onClick={() => {
             setSearch('')
             setStatus('')
-            setWarehouse('')
-            resetPage()
+                    resetPage()
           }}
         >
           Clear filters
@@ -424,17 +419,6 @@ export default function Items() {
               value={status}
               onChange={(v) => {
                 setStatus(v)
-                resetPage()
-              }}
-            />
-            <SearchSelect
-              aria-label="Filter by warehouse"
-              placeholder="Select warehouse"
-              clearable
-              options={WAREHOUSES}
-              value={warehouse}
-              onChange={(v) => {
-                setWarehouse(v)
                 resetPage()
               }}
             />
