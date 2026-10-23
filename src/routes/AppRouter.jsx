@@ -30,6 +30,7 @@ const Estimates = lazy(() => import('@/components/Sales/Estimates/Estimates'))
 const SalesOrders = lazy(() => import('@/components/Sales/SalesOrders/SalesOrders'))
 const SalesInvoices = lazy(() => import('@/components/Sales/Invoices/Invoices'))
 const InvoiceEditor = lazy(() => import('@/components/Sales/Invoices/InvoiceEditor'))
+const InvoicePrintPage = lazy(() => import('@/components/Sales/Invoices/InvoicePrintPage'))
 const DeliveryChallans = lazy(() => import('@/components/Sales/DeliveryChallans/DeliveryChallans'))
 const SalesReturns = lazy(() => import('@/components/Sales/SalesReturns/SalesReturns'))
 const CreditNotes = lazy(() => import('@/components/Sales/CreditNotes/CreditNotes'))
@@ -132,6 +133,11 @@ export function AppRouter() {
 
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<Login />} />
+        </Route>
+
+        {/* The printed bill stands alone — no sidebar, no header, just the sheet. */}
+        <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>
+          <Route path="/admin/sales/invoices/:invoiceId/print" element={<Lazy page={InvoicePrintPage} />} />
         </Route>
 
         <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>

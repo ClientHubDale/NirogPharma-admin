@@ -235,6 +235,14 @@ await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-men
 await page.waitForSelector('#move-quantity')
 await sleep(500)
 
+// Stock goes back to the batch it came out on, so the drawer states the
+// distributor and the batch instead of offering a fresh pick.
+const returnDrawer = await pageText(page)
+has('the return names the batch it came out on', returnDrawer, BATCH)
+has('…and the distributor it is coming back from', returnDrawer, distributor.name)
+ok('the batch cannot be swapped for another', !(await page.$('#move-batch')))
+ok('nor the distributor', !(await page.$('#move-distributor')))
+
 // More than they hold is refused before it reaches the server.
 await page.type('#move-quantity', '90')
 await clickText(page, 'header button, footer button', 'Record return')
@@ -268,7 +276,12 @@ await page.type('#move-invoice', 'E2E-INV-2')
 await page.type('#issue-quantity-0', '10')
 
 // A second line on the same bill, for a batch of another product.
-const otherBatch = (await api('/stocks/batches')).data.batches.find((b) => b.itemId !== item.id && b.available > 20)
+// Picked by item name in the dropdown below, so the item must own exactly one
+// batch — otherwise the API's choice and the dropdown's can differ.
+const allBatches = (await api('/stocks/batches')).data.batches
+const otherBatch = allBatches.find(
+  (b) => b.itemId !== item.id && b.available > 20 && allBatches.filter((row) => row.itemId === b.itemId).length === 1,
+)
 await page.click('button[aria-label="Add another batch"]')
 await page.waitForSelector('#issue-batch-1')
 await sleep(300)
@@ -434,5 +447,72 @@ ok('and the distributor screen does too', !(await overflows(page)))
 await cleanup()
 const left = await api('/stocks/batches')
 ok('the suite leaves nothing behind', !(left.data?.batches ?? []).some((b) => b.batchNo.startsWith('E2E-B')))
+
+/* ── Distributor Stocks carries no Opening ───────────────────────────── */
+
+// "ओपनिंग तो यहाँ पर रिमूव होगा, ओपनिंग का तो काम नहीं है" — a distributor's
+// holding is what was issued less what came back, nothing more.
+const holdingHeads = await page.$$eval('thead th', (ths) => ths.map((t) => t.innerText.trim().toLowerCase()))
+ok('Distributor Stocks has no Opening column', !holdingHeads.includes('opening'), JSON.stringify(holdingHeads))
+ok('…but still shows Issued, Returned and Closing', ['issued', 'returned', 'closing'].every((h) => holdingHeads.includes(h)), JSON.stringify(holdingHeads))
+ok('what they hold is called Closing, not Held', !holdingHeads.includes('held'), JSON.stringify(holdingHeads))
+
+// "इसमें ये डिस्ट्रीब्यूटर का इनवॉइस नंबर भी आएगा… डेट वाइज, इनवाइस की डेट,
+// इनवाइस का नंबर." The bill the stock came on, and the date it came.
+ok('the holding says which bill it came on', holdingHeads.includes('invoice'), JSON.stringify(holdingHeads))
+has('…naming the invoice itself', await pageText(page), 'E2E-INV')
+
+// Clicking the row opens every bill behind that holding.
+await page.$$eval('tbody tr', (trs) => trs[0].click())
+await sleep(800)
+const billsModal = await pageText(page)
+has('a row opens the bills behind it', billsModal, 'newest first')
+ok('the bill list carries dates and amounts', /date\s+invoice\s+issued\s+returned/i.test(billsModal.replace(/\s+/g, ' ')), billsModal.slice(0, 200))
+await page.keyboard.press('Escape')
+await sleep(500)
+
+/* ── the columns the client asked for ────────────────────────────────── */
+
+// The suite ends on Distributor Stocks; these are about the factory screen.
+await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
+await sleep(1500)
+
+const factoryHeads = await page.$$eval('thead th', (ths) => ths.map((t) => t.innerText.trim().toLowerCase()))
+ok('Factory Stocks still opens the year with an Opening column', factoryHeads.includes('opening'))
+ok('Factory Stocks has a Return column', factoryHeads.includes('return'), JSON.stringify(factoryHeads))
+ok('…sitting between Out and Closing', factoryHeads.indexOf('return') === factoryHeads.indexOf('out') + 1 && factoryHeads.indexOf('closing') === factoryHeads.indexOf('return') + 1)
+
+// "अब यहाँ पे ऊपर टोटल लिखेंगे आपको" — the column totals above the table.
+const totalsStrip = await pageText(page)
+ok('a totals strip sits above the table', /total · \d+ items?/i.test(totalsStrip), totalsStrip.slice(0, 120))
+
+// Issuing stock must never land in Return: that column is only what came back.
+// Out carries it, Closing drops by it, Return does not move.
+const figuresOf = async () => {
+  await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
+  await sleep(1500)
+  const cells = await page.$$eval('tbody tr td', (tds) => tds.map((td) => td.innerText.trim()))
+  const heads = await page.$$eval('thead th', (ths) => ths.map((t) => t.innerText.trim().toLowerCase()))
+  const width = heads.length
+  return { out: cells[heads.indexOf('out')], returned: cells[heads.indexOf('return')], width }
+}
+
+const before = await figuresOf()
+const anyBatch = (await api('/stocks/batches?from=2026-04-01&to=2027-03-31&limit=300')).data.batches.find((b) => b.available > 5)
+const anyFirm = (await api('/distributors?limit=1')).data.distributors[0]
+await api('/stocks/issue', {
+  method: 'POST',
+  body: JSON.stringify({ distributorId: anyFirm.id, invoiceNo: 'E2E/RET-CHECK', lines: [{ batchId: anyBatch.id, quantity: 5 }] }),
+})
+const after = await figuresOf()
+ok('issuing stock leaves Return alone', after.returned === before.returned, `${before.returned} → ${after.returned}`)
+ok('…and lands in Out instead', after.out !== before.out, `${before.out} → ${after.out}`)
+
+// Put it straight back, or every run would shift the figures the rest of the
+// suite asserts on.
+await api('/stocks/return', {
+  method: 'POST',
+  body: JSON.stringify({ batchId: anyBatch.id, distributorId: anyFirm.id, quantity: 5, invoiceNo: 'E2E/RET-CHECK' }),
+})
 
 await finish(browser, errors, { ignore: /status of (400|404|409)/ })

@@ -19,6 +19,7 @@ export const BATCH_COLUMN_OPTIONS = [
   { id: 'opening', label: 'Opening' },
   { id: 'in', label: 'In' },
   { id: 'out', label: 'Out' },
+  { id: 'returned', label: 'Return' },
   { id: 'closing', label: 'Closing' },
 ]
 
@@ -79,9 +80,20 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, on
         }
         return (
           <div className="flex min-w-[12rem] items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-mint-pale text-xs font-bold text-forest" aria-hidden>
-              {initialsOf(entry.itemName.replace(/^Nirog\s+/, ''))}
-            </span>
+            {/* The product photo, falling back to its initials — the client
+                asked for it here: "यहाँ पे ये नहीं दिख रहा न इमेज". */}
+            {entry.itemImage ? (
+              <img
+                src={entry.itemImage}
+                alt=""
+                className="size-9 shrink-0 rounded-lg border border-mint-pale object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-mint-pale text-xs font-bold text-forest" aria-hidden>
+                {initialsOf(entry.itemName.replace(/^Nirog\s+/, ''))}
+              </span>
+            )}
             <div className="min-w-0">
               <p className="truncate font-semibold text-black">{entry.itemName}</p>
               {entry.itemCode && <p className="truncate font-mono text-xs text-ink-muted">{entry.itemCode}</p>}
@@ -137,6 +149,9 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, on
     helper.accessor('opening', { header: 'Opening', meta: { align: 'right' }, cell: figure('opening') }),
     helper.accessor('in', { header: 'In', meta: { align: 'right' }, cell: figure('in', 'text-green-deep/80') }),
     helper.accessor('out', { header: 'Out', meta: { align: 'right' }, cell: figure('out') }),
+    // What came back from a distributor. It is already netted off Out, so this
+    // column is there to say how much of the issue did not stick.
+    helper.accessor('returned', { header: 'Return', meta: { align: 'right' }, cell: figure('returned', 'text-warning-ink/80') }),
     helper.accessor('closing', {
       header: 'Closing',
       meta: { align: 'right' },

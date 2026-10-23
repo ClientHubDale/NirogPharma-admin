@@ -41,6 +41,7 @@ export function buildPayoutColumns({ onEdit, onSetStatus }) {
     helper.accessor((r) => r.totals.salary, { id: 'salary', header: 'Salary', meta: { align: 'right' }, cell: (i) => money(i.getValue()) }),
     helper.accessor((r) => r.totals.ta, { id: 'ta', header: 'TA', meta: { align: 'right' }, cell: (i) => money(i.getValue()) }),
     helper.accessor((r) => r.totals.da, { id: 'da', header: 'DA', meta: { align: 'right' }, cell: (i) => money(i.getValue()) }),
+    helper.accessor((r) => r.totals.stay, { id: 'stay', header: 'Stay', meta: { align: 'right' }, cell: (i) => money(i.getValue()) }),
     helper.accessor((r) => r.totals.incentive, { id: 'incentive', header: 'Incentive', meta: { align: 'right' }, cell: (i) => money(i.getValue()) }),
     helper.accessor((r) => r.totals.net, {
       id: 'net',

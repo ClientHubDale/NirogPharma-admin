@@ -1,5 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit'
+import { createAsyncThunk } from '@reduxjs/toolkit'
 import { company as companyConstant } from '@/constants/site'
+import * as settingsService from '@/services/settingsService'
 
 /**
  * Company-wide settings (the Settings screen). The office window here is what
@@ -26,6 +28,11 @@ const initialState = {
     holidays: [],
   },
   bank: { accountNumber: '', accountHolder: '', bankName: '', branch: '', ifsc: '', qr: [] },
+  // What a bill must carry before it can be issued, and the terms printed on
+  // it. The server owns these — the invoice screen reads them on every load.
+  invoice: { vehicleNoRequired: false, ewayBillRequired: false, ewayBillThreshold: 50000, terms: '' },
+  status: 'idle',
+  error: null,
   mobileApp: {
     mandatoryAttendance: true,
     // Screens the field app locks until the user has checked in.
@@ -40,6 +47,22 @@ const initialState = {
   },
 }
 
+export const fetchSettings = createAsyncThunk('settings/fetch', async (_, { rejectWithValue }) => {
+  try {
+    return await settingsService.listSettings()
+  } catch (error) {
+    return rejectWithValue(settingsService.errorFrom(error))
+  }
+})
+
+export const saveSettingsGroup = createAsyncThunk('settings/save', async ({ group, patch }, { rejectWithValue }) => {
+  try {
+    return await settingsService.saveSettings(group, patch)
+  } catch (error) {
+    return rejectWithValue(settingsService.errorFrom(error))
+  }
+})
+
 const settingsSlice = createSlice({
   name: 'settings',
   initialState,
@@ -53,6 +76,27 @@ const settingsSlice = createSlice({
       state.mobileApp = { ...state.mobileApp, ...payload }
     },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchSettings.pending, (state) => {
+        state.status = 'loading'
+      })
+      // Only the groups the server owns are replaced; the rest of this screen
+      // is still local, so a load must not wipe it.
+      .addCase(fetchSettings.fulfilled, (state, { payload }) => {
+        state.status = 'ready'
+        state.error = null
+        if (payload.bank) state.bank = { ...state.bank, ...payload.bank }
+        if (payload.invoice) state.invoice = { ...state.invoice, ...payload.invoice }
+      })
+      .addCase(fetchSettings.rejected, (state, { payload }) => {
+        state.status = 'failed'
+        state.error = payload?.message ?? 'Could not load settings.'
+      })
+      .addCase(saveSettingsGroup.fulfilled, (state, { payload }) => {
+        state[payload.group] = { ...state[payload.group], ...payload.settings }
+      })
+  },
 })
 
 export const { companySaved, mobileAppSaved } = settingsSlice.actions
@@ -60,6 +104,8 @@ export const selectCompany = (state) => state.settings.company
 export const selectOffice = (state) => state.settings.office
 export const selectBank = (state) => state.settings.bank
 export const selectMobileApp = (state) => state.settings.mobileApp
+/** What a bill must carry, and the terms printed under it. */
+export const selectInvoiceSettings = (state) => state.settings.invoice
 /** Attendance reads the office window from here. */
 export const selectOfficeTime = (state) => state.settings.office
 export default settingsSlice.reducer

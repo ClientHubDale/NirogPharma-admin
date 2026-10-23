@@ -31,6 +31,23 @@ export function buildHoldingColumns({ onReturn }) {
       header: 'Batch No',
       cell: (info) => <span className="font-mono text-sm font-semibold text-black">{info.getValue()}</span>,
     }),
+    // "इसमें ये डिस्ट्रीब्यूटर का इनवॉइस नंबर भी आएगा… किस इनवाइस का कितना
+    // स्टॉक है तो पता लगेगा — डेट वाइज, इनवाइस की डेट, इनवाइस का नंबर."
+    helper.accessor('invoiceNo', {
+      header: 'Invoice',
+      cell: ({ row }) => {
+        const more = row.original.invoices.length - 1
+        return (
+          <div className="min-w-[8rem]">
+            <p className="font-mono text-sm font-semibold text-black">{row.original.invoiceNo || '—'}</p>
+            <p className="text-xs text-ink-muted">
+              {row.original.invoiceAt ? shortDate(row.original.invoiceAt) : '—'}
+              {more > 0 && <span className="ml-1 text-forest">· +{more} more</span>}
+            </p>
+          </div>
+        )
+      },
+    }),
     helper.accessor('expiryDate', {
       header: 'Expiry',
       cell: ({ row }) =>
@@ -44,7 +61,8 @@ export function buildHoldingColumns({ onReturn }) {
           </StatusPill>
         ),
     }),
-    helper.accessor('opening', { header: 'Opening', meta: { align: 'right' }, cell: (info) => <span className="font-mono tabular-nums">{qty(info.getValue())}</span> }),
+    // No Opening here: "ओपनिंग तो यहाँ पर रिमूव होगा, ओपनिंग का तो काम नहीं है."
+    // A distributor's holding is simply what was issued less what came back.
     helper.accessor('issued', {
       header: 'Issued',
       meta: { align: 'right' },
@@ -55,8 +73,9 @@ export function buildHoldingColumns({ onReturn }) {
       meta: { align: 'right' },
       cell: (info) => <span className="font-mono tabular-nums text-ink-muted">{qty(info.getValue())}</span>,
     }),
+    // Called Closing, to read the same way as the factory's closing figure.
     helper.accessor('held', {
-      header: 'Held',
+      header: 'Closing',
       meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="inline-flex flex-col items-end">

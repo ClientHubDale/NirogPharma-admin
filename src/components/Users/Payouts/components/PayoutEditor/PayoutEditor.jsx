@@ -12,6 +12,7 @@ const workingOut = (key, calc, user) => {
   if (key === 'salary') return `${formatPrice(user.salary || 0)} × ${calc.presentDays} of ${calc.workingDays} working days`
   if (key === 'ta') return `${calc.distanceKm} km × ${formatPrice(user.taPerKm || 0)} per km`
   if (key === 'da') return `${calc.presentDays} days × ${formatPrice(user.daPerDay || 0)} per day`
+  if (key === 'stay') return `${calc.stayNights} ${calc.stayNights === 1 ? 'night' : 'nights'} × ${formatPrice(user.stayPerNight || 0)} per night`
   return `${user.incentivePercent || 0}% of ${formatPrice(calc.soldValue)} sold`
 }
 
@@ -42,6 +43,27 @@ export function PayoutEditor({ draft, calculated, user, errors, onChange, locked
       <section className="rounded-2xl border border-mint-pale bg-white p-5">
         <h3 className="mb-1 text-sm font-bold text-black">Payout bill</h3>
         <p className="mb-4 text-xs text-ink-muted">Change any figure that is wrong. The calculated one stays beside it.</p>
+
+        {/* Attendance knows the days worked, not the nights spent away, so the
+            admin enters those and the allowance works itself out. */}
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-mint-pale bg-mint-pale/40 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">Nights away from home</p>
+            <p className="text-xs text-ink-muted">Out-of-town trips this month, at {formatPrice(user.stayPerNight || 0)} per night.</p>
+          </div>
+          <div className="w-24">
+            <TextField
+              id="payout-stay-nights"
+              aria-label="Nights away"
+              size="md"
+              inputMode="numeric"
+              placeholder="0"
+              disabled={locked}
+              value={draft.stayNights ?? ''}
+              onChange={(e) => onChange('stayNights', e.target.value.replace(/[^\d]/g, ''))}
+            />
+          </div>
+        </div>
 
         <ul className="divide-y divide-mint-pale">
           {PAYOUT_LINES.map(({ key, label }) => {

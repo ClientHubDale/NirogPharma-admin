@@ -38,7 +38,7 @@ export const emptyUserForm = () => ({
   password: '',
   confirmPassword: '',
   reportingTo: '',
-  distributorId: '',
+  distributorIds: [],
   status: 'ACTIVE',
   regionIds: [],
   cityIds: [],
@@ -48,6 +48,7 @@ export const emptyUserForm = () => ({
   salary: '',
   target: '', // monthly sales target
   taPerKm: '',
+  stayPerNight: '',
   daPerDay: '',
   incentivePercent: '',
 })
@@ -55,6 +56,8 @@ export const emptyUserForm = () => ({
 export const userToForm = (user) => ({
   ...emptyUserForm(),
   ...user,
+  // One executive may cover several firms; older records carry just the one.
+  distributorIds: user.distributorIds ?? (user.distributorId ? [user.distributorId] : []),
   password: '',
   confirmPassword: '',
 })
@@ -66,7 +69,7 @@ export const formToUser = (form, id) => ({
   email: form.email.trim(),
   role: form.role,
   reportingTo: form.reportingTo,
-  distributorId: form.distributorId,
+  distributorIds: form.distributorIds,
   status: form.status,
   regionIds: form.regionIds,
   cityIds: form.cityIds,
@@ -76,6 +79,7 @@ export const formToUser = (form, id) => ({
   target: Number(form.target) || 0,
   taPerKm: Number(form.taPerKm) || 0,
   daPerDay: Number(form.daPerDay) || 0,
+  stayPerNight: Number(form.stayPerNight) || 0,
   incentivePercent: Number(form.incentivePercent) || 0,
 })
 
@@ -97,7 +101,7 @@ export function validateUserForm(form, { users, editingId }) {
   }
   if (form.reportingTo && form.reportingTo === editingId) e.reportingTo = 'A user cannot report to themselves.'
   // Payout rates
-  for (const [field, label] of [['salary', 'Salary'], ['target', 'Target'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day']]) {
+  for (const [field, label] of [['salary', 'Salary'], ['target', 'Target'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day'], ['stayPerNight', 'Stay allowance']]) {
     if (form[field] !== '' && !(Number(form[field]) >= 0)) e[field] = `${label} cannot be negative.`
   }
   if (form.incentivePercent !== '' && !(Number(form.incentivePercent) >= 0 && Number(form.incentivePercent) <= 100))

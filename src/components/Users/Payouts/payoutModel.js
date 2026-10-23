@@ -28,6 +28,7 @@ export const PAYOUT_LINES = [
   { key: 'salary', label: 'Salary' },
   { key: 'ta', label: 'Travel allowance (TA)' },
   { key: 'da', label: 'Daily allowance (DA)' },
+  { key: 'stay', label: 'Stay / hotel allowance' },
   { key: 'incentive', label: 'Incentive on sales' },
 ]
 
@@ -54,7 +55,7 @@ export const dayDistance = (record) =>
  * Returns the figures plus the counts they came from, so the editor can show
  * "₹18,000 × 22 / 26 days".
  */
-export function calculatePayout({ user, month, attendance, office, sales, parties }) {
+export function calculatePayout({ user, month, attendance, office, sales, parties, stayNights = 0 }) {
   const days = attendance.filter((record) => record.userId === user.id && record.date.startsWith(month))
   const presentDays = days.length
   const workingDays = workingDaysIn(month, office)
@@ -76,6 +77,9 @@ export function calculatePayout({ user, month, attendance, office, sales, partie
     salary,
     ta: r2(distanceKm * (Number(user.taPerKm) || 0)),
     da: r2(presentDays * (Number(user.daPerDay) || 0)),
+    // Nights away are entered on the bill — attendance records a day, not a hotel.
+    stayNights: Number(stayNights) || 0,
+    stay: r2((Number(stayNights) || 0) * (Number(user.stayPerNight) || 0)),
     incentive: r2((soldValue * (Number(user.incentivePercent) || 0)) / 100),
   }
 }
@@ -91,7 +95,7 @@ export function payoutTotals(calculated, payout) {
   const adjustments = payout?.adjustments ?? []
   const bonuses = r2(adjustments.filter((a) => a.kind === 'BONUS').reduce((sum, a) => sum + (Number(a.amount) || 0), 0))
   const deductions = r2(adjustments.filter((a) => a.kind === 'DEDUCTION').reduce((sum, a) => sum + (Number(a.amount) || 0), 0))
-  const earned = r2(lines.salary + lines.ta + lines.da + lines.incentive)
+  const earned = r2(lines.salary + lines.ta + lines.da + lines.stay + lines.incentive)
   return { ...lines, bonuses, deductions, earned, net: Math.max(0, Math.round(earned + bonuses - deductions)) }
 }
 
@@ -103,6 +107,7 @@ export const emptyPayout = (userId, month) => ({
   userId,
   month,
   status: 'DRAFT',
+  stayNights: '',
   overrides: {},
   adjustments: [],
   reason: '',

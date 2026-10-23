@@ -10,7 +10,10 @@ import { TextField } from '@/components/form/TextField'
  * all gone — the client sells to distributors only, out of one factory, under
  * one admin, and did not want the balance on the bill.
  */
-export function InvoiceBillTo({ form, errors, distributors, firm, onChange, disabled }) {
+export function InvoiceBillTo({ form, errors, distributors, firm, onChange, disabled, locked, rules = {} }) {
+  // What the bill IS cannot change once it exists — its number, who it is for
+  // and the day it carries. The rest of the paperwork still can.
+  const settled = disabled || locked
   return (
     <section className="grid grid-cols-1 gap-6 rounded-2xl border border-mint-pale bg-white p-5 lg:grid-cols-[1.2fr_1fr]">
       <div className="min-w-0">
@@ -28,7 +31,7 @@ export function InvoiceBillTo({ form, errors, distributors, firm, onChange, disa
           value={form.distributorId}
           onChange={(v) => onChange('distributorId', v)}
           invalid={Boolean(errors.distributorId)}
-          disabled={disabled}
+          disabled={settled}
         />
         {errors.distributorId && <p className="mt-1.5 text-sm font-medium text-destructive">{errors.distributorId}</p>}
 
@@ -62,7 +65,8 @@ export function InvoiceBillTo({ form, errors, distributors, firm, onChange, disa
           value={form.invoiceNo}
           onChange={(e) => onChange('invoiceNo', e.target.value)}
           error={errors.invoiceNo}
-          disabled={disabled}
+          disabled={settled}
+          labelAction={locked && !disabled ? <span className="text-xs font-medium text-ink-muted">Settled when the bill was made</span> : undefined}
         />
         <TextField
           id="invoice-date"
@@ -72,7 +76,7 @@ export function InvoiceBillTo({ form, errors, distributors, firm, onChange, disa
           value={form.invoiceDate}
           onChange={(e) => onChange('invoiceDate', e.target.value)}
           error={errors.invoiceDate}
-          disabled={disabled}
+          disabled={settled}
         />
         <TextField
           id="invoice-credit-days"
@@ -95,14 +99,30 @@ export function InvoiceBillTo({ form, errors, distributors, firm, onChange, disa
           onChange={(e) => onChange('transport', e.target.value)}
           disabled={disabled}
         />
+        {/* Both are always on the bill. Settings only decide whether it can
+            go out without them — "इशू हमेशा इनवाइस और ईवे दोनों होंगे". */}
         <TextField
           id="invoice-vehicle"
           label="Vehicle No."
+          required={Boolean(rules.vehicleNoRequired)}
           size="md"
           placeholder="e.g. UP 10 DE 5566"
           maxLength={20}
           value={form.vehicleNo}
           onChange={(e) => onChange('vehicleNo', e.target.value.toUpperCase())}
+          error={errors.vehicleNo}
+          disabled={disabled}
+        />
+        <TextField
+          id="invoice-eway"
+          label="E-way bill No."
+          required={Boolean(rules.ewayBillRequired)}
+          size="md"
+          placeholder="e.g. 1234 5678 9012"
+          maxLength={30}
+          value={form.ewayBillNo}
+          onChange={(e) => onChange('ewayBillNo', e.target.value.toUpperCase())}
+          error={errors.ewayBillNo}
           disabled={disabled}
         />
         <TextField

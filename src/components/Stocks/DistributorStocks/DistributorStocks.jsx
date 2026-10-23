@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Truck } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { Modal } from '@/components/common/Modal'
 import { useToast } from '@/components/common/Toast'
 import { DataTable } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
@@ -78,6 +79,10 @@ export default function DistributorStocks() {
   const totalHeld = useMemo(() => filtered.reduce((sum, row) => sum + Number(row.held), 0), [filtered])
 
   const columns = useMemo(() => buildHoldingColumns({ onReturn: (row) => openReturn(row) }), [])
+
+  // Which bills this batch reached them on. The row shows the latest; this is
+  // the rest of them — "किस इनवाइस का कितना स्टॉक है".
+  const [bills, setBills] = useState(null)
 
   // Save only lights up once there is something to save.
   const changed = returning && JSON.stringify(returning.form) !== JSON.stringify(returning.initial)
@@ -207,6 +212,7 @@ export default function DistributorStocks() {
             data={filtered}
             columns={columns}
             getRowId={(row) => row.id}
+            onRowClick={(row) => setBills(row)}
             pagination={page}
             onPaginationChange={setPagination}
             empty={
@@ -219,6 +225,35 @@ export default function DistributorStocks() {
           />
         )}
       </section>
+
+      <Modal
+        open={Boolean(bills)}
+        onOpenChange={(open) => !open && setBills(null)}
+        title={bills ? `${bills.itemName} · ${bills.batchNo}` : ''}
+        description={bills ? `Every bill this batch reached ${bills.distributorName} on, newest first.` : ''}
+        className="max-w-xl"
+      >
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-mint-pale text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
+              <th className="py-2 pr-3">Date</th>
+              <th className="py-2 pr-3">Invoice</th>
+              <th className="py-2 pr-3 text-right">Issued</th>
+              <th className="py-2 text-right">Returned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bills?.invoices.map((bill, index) => (
+              <tr key={`${bill.invoiceNo}-${bill.at}-${index}`} className="border-b border-mint-pale/70 last:border-0">
+                <td className="py-2.5 pr-3 whitespace-nowrap">{bill.at}</td>
+                <td className="py-2.5 pr-3 font-mono text-xs font-semibold text-black">{bill.invoiceNo || '—'}</td>
+                <td className="py-2.5 pr-3 text-right font-mono tabular-nums text-green-deep">{bill.issued || '—'}</td>
+                <td className="py-2.5 text-right font-mono tabular-nums text-ink-muted">{bill.returned || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Modal>
 
       <FormDrawer
         open={Boolean(returning)}
@@ -234,6 +269,7 @@ export default function DistributorStocks() {
         {returning && (
           <MoveForm
             direction="RETURN"
+            holding={returning.row}
             form={returning.form}
             errors={returning.errors}
             distributors={distributors}

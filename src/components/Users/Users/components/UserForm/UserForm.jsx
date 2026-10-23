@@ -11,7 +11,6 @@ import { isAllAccess, pickAccess, USER_ROLES, withAllOption } from '../../userMo
  * Geography and catalogue access narrow what the mobile app shows them.
  */
 export function UserForm({ form, errors, onChange, editing, userOptions, distributorOptions = [], regions, cities }) {
-  const set = (field) => (value) => onChange(field, value)
   const allRegions = isAllAccess(form.regionIds)
   const cityOptions = withAllOption(
     'All cities',
@@ -90,21 +89,22 @@ export function UserForm({ form, errors, onChange, editing, userOptions, distrib
               onChange={(value) => {
                 onChange('reportingTo', value)
                 // The distributor below belongs to the manager who was chosen before.
-                if (form.distributorId && !distributorOptions.some((d) => d.value === form.distributorId && d.managerId === value)) {
-                  onChange('distributorId', '')
-                }
+                const stillTheirs = (form.distributorIds ?? []).filter((id) =>
+                  distributorOptions.some((d) => d.value === id && d.managerId === value),
+                )
+                if (stillTheirs.length !== (form.distributorIds ?? []).length) onChange('distributorIds', stillTheirs)
               }}
               error={errors.reportingTo}
             />
-            <SelectField
+            {/* One executive covers several firms, so this is a list. */}
+            <MultiSelect
               id="usr-distributor"
-              label="Distributor"
-              placeholder={form.reportingTo ? 'Select distributor' : 'Choose a manager first'}
-              clearable
+              label="Distributors"
+              placeholder={form.reportingTo ? 'Add a distributor' : 'Choose a manager first'}
               options={form.reportingTo ? distributorOptions.filter((d) => d.managerId === form.reportingTo) : distributorOptions}
-              value={form.distributorId}
-              onChange={set('distributorId')}
-              error={errors.distributorId}
+              value={form.distributorIds}
+              onChange={(next) => onChange('distributorIds', next)}
+              error={errors.distributorIds}
             />
           </>
         )}
@@ -193,6 +193,18 @@ export function UserForm({ form, errors, onChange, editing, userOptions, distrib
           value={form.daPerDay}
           onChange={(e) => onChange('daPerDay', e.target.value.replace(/[^\d.]/g, ''))}
           error={errors.daPerDay}
+        />
+        {/* A trip that keeps them out overnight costs a hotel on top of the DA. */}
+        <TextField
+          id="usr-stay"
+          label="Stay allowance per night"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          prefix={<span className="pl-3 text-sm text-ink-muted">₹</span>}
+          value={form.stayPerNight}
+          onChange={(e) => onChange('stayPerNight', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.stayPerNight}
         />
       </FormSection>
     </div>

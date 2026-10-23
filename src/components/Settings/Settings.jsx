@@ -1,17 +1,29 @@
-import { useState } from 'react'
-import { Building2, Loader2, Smartphone } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Building2, Loader2, Receipt, Smartphone } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Notice } from '@/components/data/Notice'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { companySaved, mobileAppSaved, selectBank, selectCompany, selectMobileApp, selectOffice } from '@/store/settingsSlice'
+import {
+  companySaved,
+  fetchSettings,
+  mobileAppSaved,
+  saveSettingsGroup,
+  selectBank,
+  selectCompany,
+  selectInvoiceSettings,
+  selectMobileApp,
+  selectOffice,
+} from '@/store/settingsSlice'
 import { selectUsers } from '@/store/usersSlice'
+import { BillingSettings } from './components/BillingSettings'
 import { CompanySettings } from './components/CompanySettings'
 import { MobileAppSettings } from './components/MobileAppSettings'
 import { cleanHolidays, validateCompany } from './settingsModel'
 
 const TABS = [
   { id: 'company', label: 'Company', icon: Building2, title: 'Company details' },
+  { id: 'billing', label: 'Billing', icon: Receipt, title: 'Billing settings' },
   { id: 'mobile', label: 'Mobile app', icon: Smartphone, title: 'Mobile app settings' },
 ]
 
@@ -22,14 +34,32 @@ export default function Settings() {
   const savedOffice = useSelector(selectOffice)
   const savedBank = useSelector(selectBank)
   const savedMobileApp = useSelector(selectMobileApp)
+  const savedInvoice = useSelector(selectInvoiceSettings)
   const staff = useSelector(selectUsers).filter((user) => user.role !== 'ADMIN')
 
   const [tab, setTab] = useState('company')
   const [form, setForm] = useState({ company: savedCompany, office: savedOffice, bank: savedBank })
   const [mobileApp, setMobileApp] = useState(savedMobileApp)
+  const [invoice, setInvoice] = useState(savedInvoice)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
+
+  useEffect(() => {
+    dispatch(fetchSettings())
+  }, [dispatch])
+
+  // The server owns the bank and billing groups. When a load or a save brings
+  // new values in, the draft on screen is reset to them — adjusted during the
+  // render that notices, rather than in an effect that would render twice.
+  const [serverCopy, setServerCopy] = useState({ bank: savedBank, invoice: savedInvoice })
+  if (serverCopy.bank !== savedBank || serverCopy.invoice !== savedInvoice) {
+    setServerCopy({ bank: savedBank, invoice: savedInvoice })
+    if (serverCopy.bank !== savedBank) setForm((f) => ({ ...f, bank: savedBank }))
+    if (serverCopy.invoice !== savedInvoice) setInvoice(savedInvoice)
+  }
+
+  const changeInvoice = (field, value) => setInvoice((state) => ({ ...state, [field]: value }))
 
   const change = (group, field, value) => {
     setForm((f) => ({ ...f, [group]: { ...f[group], [field]: value } }))
@@ -46,9 +76,29 @@ export default function Settings() {
       }
     }
     setSaving(true)
-    await new Promise((r) => setTimeout(r, 350)) // mock network
-    if (tab === 'company') dispatch(companySaved({ ...form, office: { ...form.office, holidays: cleanHolidays(form.office.holidays) } }))
-    else dispatch(mobileAppSaved(mobileApp))
+
+    if (tab === 'billing') {
+      const result = await dispatch(saveSettingsGroup({ group: 'invoice', patch: invoice }))
+      setSaving(false)
+      if (saveSettingsGroup.rejected.match(result)) {
+        return setNotice({ tone: 'danger', message: result.payload?.message ?? 'Could not save the billing settings.' })
+      }
+      return setNotice({ tone: 'success', message: 'Billing settings saved — they apply to every bill from now on.' })
+    }
+
+    if (tab === 'company') {
+      // The bank is the server's; the rest of this tab is still local.
+      const result = await dispatch(saveSettingsGroup({ group: 'bank', patch: form.bank }))
+      if (saveSettingsGroup.rejected.match(result)) {
+        setSaving(false)
+        return setNotice({ tone: 'danger', message: result.payload?.message ?? 'Could not save the bank details.' })
+      }
+      dispatch(companySaved({ ...form, office: { ...form.office, holidays: cleanHolidays(form.office.holidays) } }))
+    } else {
+      await new Promise((r) => setTimeout(r, 350)) // mock network
+      dispatch(mobileAppSaved(mobileApp))
+    }
+
     setSaving(false)
     setNotice({
       tone: 'success',
@@ -99,6 +149,8 @@ export default function Settings() {
 
           {tab === 'company' ? (
             <CompanySettings company={form.company} office={form.office} bank={form.bank} errors={errors} onChange={change} />
+          ) : tab === 'billing' ? (
+            <BillingSettings invoice={invoice} onChange={changeInvoice} />
           ) : (
             <MobileAppSettings mobileApp={mobileApp} staff={staff} onChange={(field, value) => setMobileApp((m) => ({ ...m, [field]: value }))} />
           )}

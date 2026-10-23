@@ -2,6 +2,7 @@ import { Gift, PackageSearch, Plus, Trash2 } from 'lucide-react'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { formatPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { monthYear } from '../InvoicePrint/billFormat'
 import { previewLine } from '../../invoiceModel'
 
 function NumberCell({ value, onChange, label, prefix, invalid, readOnly, width = 'w-24' }) {
@@ -41,7 +42,7 @@ function NumberCell({ value, onChange, label, prefix, invalid, readOnly, width =
  * Rate is not typed: it comes from the distributor's rate column, with the GST
  * taken back out of it, and the server has the last word on save.
  */
-export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, tiers, disabled }) {
+export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, tiers, disabled, interState = false }) {
   const setLine = (index, patch) =>
     onChange(
       'lines',
@@ -64,22 +65,28 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-mint-pale bg-white">
+    <section className="overflow-hidden rounded-xl border border-ink/25 bg-white">
       <p className="border-b border-mint-pale px-5 py-4 text-xs font-bold tracking-wide text-ink-muted uppercase">Items</p>
       <div className="relative overflow-x-auto">
-        <table className="w-full min-w-[64rem] text-sm">
+        <table className="w-full min-w-[56rem] text-sm">
           <thead>
-            <tr className="border-b border-mint-pale bg-bg text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
-              <th className="w-12 px-4 py-2.5">S.No</th>
-              <th className="px-3 py-2.5">Items</th>
-              <th className="px-3 py-2.5 text-right">MRP</th>
-              <th className="px-3 py-2.5 text-right">Quantity</th>
-              <th className="min-w-[16rem] px-3 py-2.5">Batch</th>
-              <th className="px-3 py-2.5 text-right">Rate / item</th>
-              <th className="px-3 py-2.5 text-right">Taxable</th>
-              <th className="px-3 py-2.5 text-right">Tax</th>
-              <th className="px-3 py-2.5 text-right">Amount</th>
-              <th className="w-10 px-2 py-2.5">
+            {/* The columns of the bill the client prints, in their order. */}
+            <tr className="border-b border-mint-pale bg-bg text-center text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              <th className="w-10 px-2 py-2">S.<br />No</th>
+              <th className="px-2 py-2 text-left">Description of goods</th>
+              <th className="min-w-[14rem] px-2 py-2">Batch No.</th>
+              <th className="w-16 px-1 py-2">Mfd.</th>
+              <th className="w-16 px-1 py-2">Exp.</th>
+              <th className="w-20 px-1 py-2">HSN<br />Code</th>
+              <th className="w-12 px-1 py-2">Qty.<br />(in box)</th>
+              <th className="w-24 px-1 py-2">UOM<br />(in bottle)</th>
+              <th className="w-20 px-1 py-2 text-right">MRP</th>
+              <th className="w-20 px-1 py-2 text-right">Rate</th>
+              <th className="w-24 px-1 py-2 text-right">Taxable<br />value</th>
+              <th className="w-20 px-1 py-2 text-right">CGST</th>
+              <th className="w-20 px-1 py-2 text-right">SGST</th>
+              <th className="w-20 px-1 py-2 text-right">IGST</th>
+              <th className="w-10 px-2 py-2">
                 <span className="sr-only">Remove</span>
               </th>
             </tr>
@@ -87,7 +94,7 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
           <tbody className="divide-y divide-mint-pale">
             {lines.length === 0 && (
               <tr>
-                <td colSpan={10} className={cn('px-4 py-12 text-center text-sm', errors.lines_empty ? 'text-destructive' : 'text-ink-muted')}>
+                <td colSpan={15} className={cn('px-4 py-12 text-center text-sm', errors.lines_empty ? 'text-destructive' : 'text-ink-muted')}>
                   <PackageSearch className="mx-auto mb-2 size-7 text-green-deep" strokeWidth={1.5} />
                   {errors.lines_empty ?? 'No items added yet. Search below to add your first item.'}
                 </td>
@@ -101,6 +108,8 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
               const batches = batchesFor(line.itemId)
               const money = previewLine({ item, tier, tiers, quantity: line.quantity })
               const allocated = line.batches.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)
+              // MFD. and EXP. come off the batch, so the first one chosen fills them.
+              const firstBatch = batches.find((b) => b.id === line.batches.find((row) => row.batchId)?.batchId)
 
               // What the item's scheme gives away at this quantity, and what
               // it looks like — a giveaway carries its own picture, a
@@ -135,23 +144,6 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
                     </p>
                     {problem.quantity && <p className="text-xs font-medium text-destructive">{problem.quantity}</p>}
                   </td>
-                  <td className="px-3 py-2.5 text-right align-top font-mono text-xs text-ink-muted">
-                    {item?.mrp ? formatPrice(item.mrp) : '—'}
-                  </td>
-                  <td className="px-3 py-2.5 align-top">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <NumberCell
-                        label={`Quantity of ${item?.name ?? 'item'}`}
-                        value={line.quantity}
-                        readOnly={disabled}
-                        onChange={(v) => setLine(index, { quantity: v })}
-                        invalid={Boolean(problem.quantity)}
-                        width="w-20"
-                      />
-                      <span className="w-10 text-xs text-ink-muted">{item?.unit}</span>
-                    </div>
-                  </td>
-
                   <td className="px-3 py-2.5 align-top">
                     <div className="space-y-2">
                       {line.batches.map((row, at) => {
@@ -214,18 +206,44 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
                     </div>
                   </td>
 
-                  <td className="px-3 py-2.5 text-right align-top font-mono text-sm whitespace-nowrap">
+                  {/* Taken from the batch and the item, never typed again. */}
+                  <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">{monthYear(firstBatch?.mfgDate)}</td>
+                  <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">{monthYear(firstBatch?.expiryDate)}</td>
+                  <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">{item?.hsn || '—'}</td>
+                  <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">1</td>
+                  <td className="px-1 py-2.5 align-top">
+                    <div className="flex items-center justify-end gap-1">
+                      <NumberCell
+                        label={`Quantity of ${item?.name ?? 'item'}`}
+                        value={line.quantity}
+                        readOnly={disabled}
+                        onChange={(v) => setLine(index, { quantity: v })}
+                        invalid={Boolean(problem.quantity)}
+                        width="w-16"
+                      />
+                      <span className="text-[10px] text-ink-muted">{item?.unit}</span>
+                    </div>
+                  </td>
+                  <td className="px-1 py-2.5 text-right align-top font-mono text-xs text-ink-muted">
+                    {item?.mrp ? formatPrice(item.mrp) : '—'}
+                  </td>
+                  <td className="px-1 py-2.5 text-right align-top font-mono text-sm whitespace-nowrap">
                     {money ? formatPrice(money.rate) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-right align-top font-mono text-sm whitespace-nowrap">
+                  <td className="px-1 py-2.5 text-right align-top font-mono text-sm whitespace-nowrap">
                     {money ? formatPrice(money.taxableValue) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-right align-top text-xs whitespace-nowrap">
-                    <span className="text-ink">{money ? `${money.gst}%` : '—'}</span>
-                    {money && <span className="block font-mono text-ink-muted">{formatPrice(money.taxAmount)}</span>}
+                  {/* The bill splits the tax into its halves, or shows IGST. */}
+                  <td className="px-1 py-2.5 text-right align-top font-mono text-xs whitespace-nowrap">
+                    {money && !interState ? formatPrice(Math.round((money.taxAmount / 2) * 100) / 100) : '0.00'}
                   </td>
-                  <td className="px-3 py-2.5 text-right align-top font-mono font-semibold whitespace-nowrap text-black">
-                    {money ? formatPrice(money.total) : '—'}
+                  <td className="px-1 py-2.5 text-right align-top font-mono text-xs whitespace-nowrap">
+                    {money && !interState
+                      ? formatPrice(Math.round((money.taxAmount - Math.round((money.taxAmount / 2) * 100) / 100) * 100) / 100)
+                      : '0.00'}
+                  </td>
+                  <td className="px-1 py-2.5 text-right align-top font-mono text-xs whitespace-nowrap">
+                    {money && interState ? formatPrice(money.taxAmount) : '0.00'}
                   </td>
                   <td className="px-2 py-2.5 align-top">
                     <button

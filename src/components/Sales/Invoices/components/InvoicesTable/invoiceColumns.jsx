@@ -1,5 +1,5 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { Ban, CheckCircle2, Pencil, Trash2, Truck } from 'lucide-react'
+import { Ban, CheckCircle2, Download, FileText, Pencil, Trash2, Truck } from 'lucide-react'
 import { listFeatures } from '@/components/data/DataTable'
 import { RowActions } from '@/components/data/RowActions'
 import { StatusPill } from '@/components/data/StatusPill'
@@ -32,7 +32,7 @@ export const DEFAULT_INVOICE_VISIBILITY = { gstin: false, taxable: false, tax: f
  * Created By is gone on purpose — the client has one admin, so the column said
  * the same thing on every row.
  */
-export function buildInvoiceColumns({ onEdit, onSetStatus, onDelete }) {
+export function buildInvoiceColumns({ onEdit, onSetStatus, onDelete, onPreview, onDownloadPdf }) {
   return helper.columns([
     helper.accessor('invoiceDate', {
       id: 'date',
@@ -123,7 +123,13 @@ export function buildInvoiceColumns({ onEdit, onSetStatus, onDelete }) {
       meta: { align: 'right', className: 'w-12' },
       cell: ({ row }) => {
         const invoice = row.original
-        const actions = [{ label: 'Open', icon: Pencil, onSelect: () => onEdit(invoice) }]
+        // "थ्री डॉट पर क्लिक करो… पीडीएफ डाउनलोड हो जाएगा" — the bill as it
+        // prints, and the PDF, both from here.
+        const actions = [
+          { label: 'Open', icon: Pencil, onSelect: () => onEdit(invoice) },
+          { label: 'View bill', icon: FileText, onSelect: () => onPreview(invoice) },
+          { label: 'Download PDF', icon: Download, onSelect: () => onDownloadPdf(invoice) },
+        ]
 
         if (invoice.status === 'CONFIRMED') actions.push({ label: 'Mark dispatched', icon: Truck, onSelect: () => onSetStatus(invoice, 'DISPATCHED') })
         if (invoice.status === 'DISPATCHED') actions.push({ label: 'Mark delivered', icon: CheckCircle2, onSelect: () => onSetStatus(invoice, 'DELIVERED') })

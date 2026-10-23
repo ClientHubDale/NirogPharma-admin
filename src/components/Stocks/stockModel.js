@@ -46,24 +46,26 @@ export const FY_MONTHS = [
 ]
 
 /**
- * The window a year and month cover. A month gives that month; no month gives
- * the whole financial year, 1 April to 31 March.
+ * The window a year and month cover. It always *starts* on 1 April, whatever
+ * month is picked — only the end moves.
  *
- * This is what makes the four figures read the way the client expects: inside a
- * month, last month's closing is the opening; across a year, last year's
- * closing is the opening and everything produced during the year counts as in.
+ * That is the client's rule: "1 अप्रैल को जो ओपनिंग आ रहा है वो 1 अप्रैल से लेकर
+ * 31 मार्च तक चेंज नहीं होगा." The opening is the balance the year began with
+ * and stays put all year; in, out and returned run from 1 April up to the end
+ * of the month being looked at, so opening + in − out is the stock on that day.
  */
 export function periodFor({ year, month }) {
   const start = Number(year)
+  const from = isoDate(new Date(start, FY_START_MONTH, 1))
 
   if (month === '' || month === null || month === undefined) {
-    return { from: isoDate(new Date(start, FY_START_MONTH, 1)), to: isoDate(new Date(start + 1, FY_START_MONTH, 0)) }
+    return { from, to: isoDate(new Date(start + 1, FY_START_MONTH, 0)) }
   }
 
   const index = Number(month)
   // January to March belong to the second half of the financial year.
   const calendarYear = index >= FY_START_MONTH ? start : start + 1
-  return { from: isoDate(new Date(calendarYear, index, 1)), to: isoDate(new Date(calendarYear, index + 1, 0)) }
+  return { from, to: isoDate(new Date(calendarYear, index + 1, 0)) }
 }
 
 /** What the screens open on: this month, in this financial year. */

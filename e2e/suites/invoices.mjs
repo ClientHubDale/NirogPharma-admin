@@ -115,7 +115,7 @@ await pickOption(page, '#line-0-batch-1', 'E2E-BILL-B')
 await page.type('input[aria-label="Quantity from batch 2"]', '2')
 await sleep(400)
 has('the line says how much of it is covered', await pageText(page), '12 of 12 picked')
-has('and the rate shows with the GST taken off', await pageText(page), 'Taxable')
+has('and the rate shows with the GST taken off', (await pageText(page)).toLowerCase(), 'taxable')
 
 await clickText(page, 'button', 'Save')
 await page.waitForFunction(() => location.pathname === '/admin/sales/invoices', { timeout: 15000 })
@@ -126,10 +126,44 @@ has('with the bill on it', await pageText(page), NUMBER)
 const saved = (await api(`/invoices?q=${encodeURIComponent(NUMBER)}`)).data.invoices[0]
 ok('the bill is saved as pending', saved?.status === 'PENDING', saved?.status)
 
-// Back into it to look at the figures and send it.
+// Back into it to look at the figures and send it. A saved bill opens as the
+// bill now, so the form is one click behind Edit.
 await goto(page, `/admin/sales/invoices/${saved.id}/edit`)
+await sleep(1500)
+has('a saved bill opens in the bill format', (await pageText(page)).toLowerCase(), 'tax invoice')
+await clickText(page, 'button', 'Edit')
 await page.waitForSelector('#invoice-no')
 await sleep(1000)
+has('and the number is settled once it exists', await pageText(page), 'Settled when the bill was made')
+
+// PDF sits first, before Cancel, and prints the sheet on screen — so a bill
+// that has not been saved yet prints just the same.
+const buttons = await page.$$eval('button', (els) => els.map((b) => b.innerText.trim()).filter(Boolean))
+const pdfAt = buttons.findIndex((label) => label === 'PDF')
+ok('there is a PDF button', pdfAt !== -1, JSON.stringify(buttons.slice(0, 8)))
+ok('…and it comes before Cancel', pdfAt < buttons.indexOf('Cancel'), JSON.stringify(buttons.slice(0, 8)))
+
+await page.emulateMediaType('print')
+await sleep(400)
+const onPaper = await page.evaluate(() => {
+  const sheet = document.querySelector('#bill-sheet')
+  const nav = [...document.querySelectorAll('a')].find((a) => a.textContent.includes('Live Location'))
+  return {
+    sheet: sheet ? getComputedStyle(sheet).visibility : 'absent',
+    nav: nav ? getComputedStyle(nav).visibility : 'absent',
+  }
+})
+ok('the bill goes on the paper', onPaper.sheet === 'visible', JSON.stringify(onPaper))
+ok('and the panel around it does not', onPaper.nav === 'hidden', JSON.stringify(onPaper))
+
+// What goes on paper is the bill, never the editing table behind it.
+const paper = await page.evaluate(() => document.querySelector('#bill-sheet')?.innerText ?? '')
+ok('the editing table is not printed', !/of \d+ picked/.test(paper), paper.slice(0, 160))
+has('…the bill table is', paper, 'DESCRIPTION')
+has('…and it names the buyer', paper, 'M/S')
+ok('editor-only rows stay off the paper', !/CREDIT PERIOD/i.test(paper), paper.slice(0, 200))
+await page.emulateMediaType('screen')
+ok('so the field cannot be typed into', await page.$eval('#invoice-no', (el) => el.disabled))
 
 /* ── the money ────────────────────────────────────────────────────────── */
 
@@ -141,8 +175,8 @@ ok('the total is whole rupees', Number.isInteger(saved.total), String(saved.tota
 ok('the tax is split for the state', saved.interState ? saved.igst === saved.taxAmount : Math.abs(saved.cgst + saved.sgst - saved.taxAmount) < 0.01)
 
 const summary = await pageText(page)
-has('the totals panel shows the taxable value', summary, 'Taxable value')
-has('and the round off', summary, 'Round off')
+has('the totals panel shows the taxable value', summary.toLowerCase(), 'taxable value')
+has('and the round off', summary.toLowerCase(), 'round off')
 has('and which tax applies', summary, saved.interState ? 'IGST' : 'CGST')
 
 /* ── saving is not issuing ────────────────────────────────────────────── */
@@ -173,6 +207,9 @@ eq('the bill is confirmed', issued.status, 'CONFIRMED')
 /* ── an issued bill is locked ─────────────────────────────────────────── */
 
 await goto(page, `/admin/sales/invoices/${saved.id}/edit`)
+await sleep(1500)
+has('an issued bill opens as the bill as well', (await pageText(page)).toLowerCase(), 'tax invoice')
+await clickText(page, 'button', 'Edit')
 await page.waitForSelector('#invoice-no')
 await sleep(1000)
 ok('its number can no longer be edited', await page.$eval('#invoice-no', (el) => el.disabled))
@@ -202,6 +239,67 @@ eq('the bill reads cancelled', (await api(`/invoices?q=${encodeURIComponent(NUMB
 await page.setViewport({ width: 375, height: 760 })
 await goto(page, '/admin/sales/invoices', { heading: 'Sales Invoices' })
 ok('the list fits a phone screen', !(await overflows(page)))
+
+/* ── Settings › Billing: what a bill must carry ──────────────────────── */
+
+await goto(page, '/admin/settings', { heading: 'Settings' })
+await sleep(1200)
+await clickText(page, 'nav button', 'Billing')
+await sleep(800)
+has('Settings has a Billing tab', await pageText(page), 'What a bill must carry')
+ok('with a vehicle-number switch', Boolean(await page.$('#billing-vehicle')))
+ok('and an e-way bill switch', Boolean(await page.$('#billing-eway')))
+ok('and the terms printed on every bill', Boolean(await page.$('#billing-terms')))
+
+// The bank is the admin's to fill, and its name is typed — a fixed list could
+// not say "KOTAK MAHINDRA BANK" when it only carried "Kotak Bank".
+await clickText(page, 'nav button', 'Company')
+await sleep(800)
+const bankName = await page.$('#bank-name')
+ok('the bank name is a field the admin types', Boolean(bankName))
+ok('…not a fixed list to pick from', await page.$eval('#bank-name', (el) => el.tagName === 'INPUT'))
+for (const id of ['#bank-branch', '#bank-ifsc', '#bank-account', '#bank-holder']) {
+  ok(`and ${id.slice(1)} can be filled too`, Boolean(await page.$(id)))
+}
+
+/* ── a saved bill opens as the bill ──────────────────────────────────── */
+
+// "सेम ऐसे ही खुल के आएगा… सब भरा हुआ है… ऐसे फॉर्मेट में दिखाई दीजिये."
+const anyBill = (await api('/invoices?limit=20')).data.invoices.find((row) => row.lines?.length)
+await goto(page, `/admin/sales/invoices/${anyBill.id}/edit`)
+await sleep(2000)
+const billView = await pageText(page)
+has('a saved bill opens in the bill format', billView.toLowerCase(), 'tax invoice')
+has('…with the amount spelled out', billView.toLowerCase(), 'total in words rs.')
+has('…and a way back to the form', billView, 'Edit')
+
+/* ── the printable sheet behind the PDF ──────────────────────────────── */
+
+await goto(page, `/admin/sales/invoices/${anyBill.id}/print`)
+await sleep(1800)
+const sheet = await pageText(page)
+has('the bill prints on its own page', sheet.toLowerCase(), 'tax invoice')
+ok('with none of the panel around it', !sheet.includes('Live Location'), sheet.slice(0, 120))
+has('and it names the bill', sheet, anyBill.invoiceNo)
+// A bill has to say who it is for — the firm comes back flattened onto the
+// invoice, not nested, which once left Bill to blank on every printed sheet.
+has('and says who it is for', sheet, anyBill.distributorName)
+
+// The bank on the bill is whatever the admin saved in Settings — never a
+// value baked into the code.
+const bankBefore = (await api('/settings')).data.settings.bank
+await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: 'E2E TEST BANK', ifsc: 'E2EB0001234', accountNumber: '9988776655', branch: 'E2E BRANCH' }) })
+await goto(page, `/admin/sales/invoices/${anyBill.id}/print`)
+await sleep(1800)
+const withBank = await pageText(page)
+has('the bill shows the bank the admin saved', withBank, 'E2E TEST BANK')
+has('…with its IFSC', withBank, 'E2EB0001234')
+has('…and the account number', withBank, '9988776655')
+
+await api('/settings/bank', { method: 'PATCH', body: JSON.stringify(bankBefore) })
+await goto(page, `/admin/sales/invoices/${anyBill.id}/print`)
+await sleep(1800)
+ok('and it follows Settings back again', !(await pageText(page)).includes('E2E TEST BANK'))
 
 await cleanup()
 const left = await api('/invoices?limit=100')

@@ -1,0 +1,12 @@
+import { start, BASE, ADMIN } from './lib.mjs'
+const { browser, page } = await start()
+page.on('pageerror', (e) => console.log('PAGEERROR:', e.message))
+page.on('response', (r) => { if (r.url().includes('/auth/login')) console.log('login response:', r.status()) })
+await page.goto(BASE + '/login', { waitUntil: 'networkidle2' })
+await page.type('#mobile', ADMIN.mobile)
+await page.type('#password', ADMIN.password)
+await Promise.all([page.click('button[type=submit]')])
+await new Promise((r) => setTimeout(r, 8000))
+console.log('url now :', page.url())
+console.log('body    :', JSON.stringify((await page.evaluate(() => document.body.innerText)).slice(0, 220)))
+await browser.close()

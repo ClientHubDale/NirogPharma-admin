@@ -17,9 +17,10 @@ const FIELDS = [
   'target',
   'taPerKm',
   'daPerDay',
+  'stayPerNight',
   'incentivePercent',
 ]
-const LIST_FIELDS = ['regionIds', 'cityIds', 'routeIds']
+const LIST_FIELDS = ['regionIds', 'cityIds', 'routeIds', 'distributorIds']
 
 /**
  * A new photo is a File (that is what ImageUploader keeps), which has to go as

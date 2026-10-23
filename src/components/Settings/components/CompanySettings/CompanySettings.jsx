@@ -146,10 +146,23 @@ export function CompanySettings({ company, office, bank, errors, onChange }) {
           error={errors.accountNumber}
         />
         <TextField id="bank-holder" label="Account holder name" size="md" value={bank.accountHolder} onChange={(e) => set('bank', 'accountHolder')(e.target.value)} />
-        <div>
-          <label htmlFor="bank-name" className="mb-2 block text-sm font-semibold text-ink">Bank name</label>
-          <SearchSelect id="bank-name" aria-label="Bank name" placeholder="Select bank" clearable options={BANKS} value={bank.bankName} onChange={set('bank', 'bankName')} />
-        </div>
+        {/* Typed, not picked from a list: the bill prints the bank's name as
+            the company writes it — "KOTAK MAHINDRA BANK", not whichever
+            shortened form a fixed list happened to carry. */}
+        <TextField
+          id="bank-name"
+          label="Bank name"
+          size="md"
+          list="known-banks"
+          placeholder="e.g. Kotak Mahindra Bank"
+          value={bank.bankName}
+          onChange={(e) => set('bank', 'bankName')(e.target.value)}
+        />
+        <datalist id="known-banks">
+          {BANKS.map((row) => (
+            <option key={row.value} value={row.value} />
+          ))}
+        </datalist>
         <TextField id="bank-branch" label="Branch name" size="md" value={bank.branch} onChange={(e) => set('bank', 'branch')(e.target.value)} />
         <TextField id="bank-ifsc" label="IFSC code" size="md" maxLength={11} value={bank.ifsc} onChange={(e) => set('bank', 'ifsc')(e.target.value.toUpperCase())} error={errors.ifsc} />
         <ImageUploader label="Upload QR Code" images={bank.qr} onChange={set('bank', 'qr')} max={1} />

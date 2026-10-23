@@ -51,6 +51,9 @@ ok('Designation is gone', !labels.includes('Designation') && !form.includes('Des
 ok('the Other Access Details section is gone', !form.includes('Other Access Details'))
 has('Payout Details is still there', form, 'Payout Details')
 ok('Monthly target is a payout field', Boolean(await page.$('#usr-target')))
+// A trip that keeps someone out overnight costs a hotel the DA does not cover.
+ok('a stay allowance sits beside TA and DA', Boolean(await page.$('#usr-stay')))
+has('…and it is priced per night', form, 'Stay allowance per night')
 ok('the Route picker is gone', !(await page.$('#usr-routes')) && !form.includes('Select Route'))
 ok('Region and City are still there', Boolean(await page.$('#usr-regions')) && Boolean(await page.$('#usr-cities')))
 

@@ -195,3 +195,61 @@
     background-color: var(--green-fresh);
   }
 }
+
+/**
+ * Printing a bill. The panel's chrome — sidebar, header, buttons, the help
+ * bubble — is left out, and only the sheet marked `#bill-sheet` goes on the
+ * paper. The create screen is the bill itself, so a bill that has not been
+ * saved yet prints exactly the same as one that has; the fields it is typed
+ * into are flattened so they print as text rather than as boxes.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #bill-sheet,
+  #bill-sheet * {
+    visibility: visible;
+  }
+
+  #bill-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: 0;
+    padding: 0;
+  }
+
+  #bill-sheet input,
+  #bill-sheet textarea,
+  #bill-sheet [data-slot='select-trigger'],
+  #bill-sheet [data-slot='search-select'] {
+    border: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    appearance: none;
+  }
+
+  /* Nothing to click on paper. */
+  #bill-sheet button,
+  #bill-sheet svg {
+    display: none;
+  }
+
+  /* A placeholder is a hint to whoever is typing, not part of the bill. */
+  #bill-sheet input::placeholder,
+  #bill-sheet textarea::placeholder {
+    color: transparent !important;
+  }
+
+  #bill-sheet input::-webkit-calendar-picker-indicator {
+    display: none;
+  }
+
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+}

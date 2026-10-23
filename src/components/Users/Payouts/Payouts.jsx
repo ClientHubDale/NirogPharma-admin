@@ -67,8 +67,8 @@ export default function Payouts() {
       users
         .filter((user) => user.role !== 'ADMIN')
         .map((user) => {
-          const calculated = calculatePayout({ user, month, attendance, office, sales, parties: partiesById })
           const payout = saved[`${user.id}:${month}`] ?? emptyPayout(user.id, month)
+          const calculated = calculatePayout({ user, month, attendance, office, sales, parties: partiesById, stayNights: payout.stayNights })
           return { id: payout.id, user, calculated, payout, totals: payoutTotals(calculated, payout), edited: hasEdits(calculated, payout) }
         }),
     [users, month, attendance, office, sales, partiesById, saved],

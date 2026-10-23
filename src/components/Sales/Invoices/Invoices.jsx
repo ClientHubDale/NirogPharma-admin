@@ -139,6 +139,9 @@ export default function Invoices() {
         onEdit: (invoice) => navigate(`/admin/sales/invoices/${invoice.id}/edit`),
         onSetStatus: move,
         onDelete: destroy,
+        onPreview: (invoice) => window.open(`/admin/sales/invoices/${invoice.id}/print`, '_blank', 'noopener'),
+        // The browser's own Save as PDF, on a page that carries only the bill.
+        onDownloadPdf: (invoice) => window.open(`/admin/sales/invoices/${invoice.id}/print?print=1`, '_blank', 'noopener'),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [navigate],
@@ -176,6 +179,53 @@ export default function Invoices() {
     })
     await downloadWorkbook(workbook, `sales-invoices-${range.start}-to-${range.end}.xlsx`)
     setNotice({ tone: 'success', message: `Exported ${filtered.length} invoice${filtered.length === 1 ? '' : 's'}.` })
+  }
+
+  /**
+   * One row per item on each bill, rather than one row per bill — "किस इनवाइस
+   * में क्या गया" at the level the stock actually moved.
+   */
+  const exportInvoiceWise = async () => {
+    const workbook = await buildWorkbook({
+      sheetName: 'Invoice-wise',
+      columns: [
+        { key: 'date', header: 'Date', width: 12 },
+        { key: 'number', header: 'Invoice No', width: 18, required: true },
+        { key: 'party', header: 'Party Name', width: 30, required: true },
+        { key: 'gstin', header: 'GSTIN', width: 18 },
+        { key: 'item', header: 'Item', width: 30 },
+        { key: 'batches', header: 'Batch', width: 18 },
+        { key: 'quantity', header: 'Qty', width: 9, numFmt: '0.00' },
+        { key: 'rate', header: 'Rate', width: 12, numFmt: '0.00' },
+        { key: 'gstRate', header: 'GST %', width: 8, numFmt: '0.00' },
+        { key: 'taxable', header: 'Taxable', width: 13, numFmt: '0.00' },
+        { key: 'tax', header: 'GST', width: 13, numFmt: '0.00' },
+        { key: 'total', header: 'Amount', width: 13, numFmt: '0.00' },
+        { key: 'free', header: 'Scheme', width: 22 },
+        { key: 'status', header: 'Status', width: 12 },
+      ],
+      rows: filtered.flatMap((invoice) =>
+        (invoice.lines ?? []).map((line) => ({
+          date: invoice.invoiceDate.split('-').reverse().join('-'),
+          number: invoice.invoiceNo,
+          party: invoice.distributorName,
+          gstin: invoice.distributorGstin,
+          item: line.itemName,
+          batches: (line.batches ?? []).map((b) => b.batchNo).join(', '),
+          quantity: Number(line.quantity),
+          rate: Number(line.rate),
+          gstRate: Number(line.gstRate),
+          taxable: Number(line.taxableValue),
+          tax: Number(line.taxAmount),
+          total: Number(line.total),
+          free: line.freeLabel ?? '',
+          status: STATUS_LABEL[invoice.status],
+        })),
+      ),
+    })
+    const rows = filtered.reduce((sum, invoice) => sum + (invoice.lines?.length ?? 0), 0)
+    await downloadWorkbook(workbook, `sales-invoice-wise-${range.start}-to-${range.end}.xlsx`)
+    setNotice({ tone: 'success', message: `Exported ${rows} line${rows === 1 ? '' : 's'} across ${filtered.length} invoice${filtered.length === 1 ? '' : 's'}.` })
   }
 
   const empty = (
@@ -224,7 +274,10 @@ export default function Invoices() {
         </Button>
         <ExportMenu
           disabled={!filtered.length}
-          options={[{ label: 'Excel', hint: 'Styled .xlsx of the filtered list', icon: FileSpreadsheet, onSelect: exportExcel }]}
+          options={[
+            { label: 'Excel', hint: 'Styled .xlsx of the filtered list', icon: FileSpreadsheet, onSelect: exportExcel },
+            { label: 'Invoice-wise', hint: 'One row per item on each bill', icon: FileSpreadsheet, onSelect: exportInvoiceWise },
+          ]}
         />
         <Button size="lg" className="h-11" onClick={() => navigate('/admin/sales/invoices/new')}>
           <Plus data-icon="inline-start" /> Create sales invoice
