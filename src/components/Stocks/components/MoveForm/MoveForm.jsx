@@ -27,7 +27,7 @@ function Fixed({ label, value, className = '' }) {
  * batch are settled before the drawer opens — stock has to go back to the very
  * batch it came out on, never a fresh one. They are shown, not asked.
  */
-export function MoveForm({ form, errors, distributors, batches, available, unit, onChange, direction = 'OUT', holding }) {
+export function MoveForm({ form, errors, distributors, batches, available, unit, onChange, direction = 'OUT', holding, batchesHeld = [], nextNoteNo }) {
   const set = (field) => (e) => onChange(field, e.target.value)
   const number = (field) => (e) => onChange(field, e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))
 
@@ -54,18 +54,28 @@ export function MoveForm({ form, errors, distributors, batches, available, unit,
 
       <TextField id="move-date" label="On" size="md" type="date" max={today()} value={form.at} onChange={set('at')} error={errors.at} />
 
-      {/* A return carries a number too — the credit note against the bill it
-          came back on — so the batch's history can be traced either way. */}
+      {/* On a return this names the bill the goods first went out on. The
+          credit note gets its own number — shown below, never this one. */}
       <TextField
         id="move-invoice"
-        label={out ? 'Invoice number' : 'Credit note / invoice number'}
+        label={out ? 'Invoice number' : 'Against which bill'}
         size="md"
-        placeholder={out ? 'NP/26-27/673' : 'Against which bill'}
+        placeholder={out ? 'NP/26-27/673' : 'NP/26-27/673'}
         value={form.invoiceNo}
         onChange={set('invoiceNo')}
         error={errors.invoiceNo}
         className="sm:col-span-2"
       />
+
+      {/* "इनवाइस नंबर नया जनरेट होना चाहिए" — the number this return will be
+          credited under, so the admin sees it before confirming. */}
+      {!out && nextNoteNo && (
+        <p className="rounded-xl border border-mint-pale bg-mint-pale/40 px-3.5 py-2.5 text-sm sm:col-span-2">
+          <span className="text-ink-muted">Credit note </span>
+          <span className="font-mono font-bold text-black">{nextNoteNo}</span>
+          <span className="text-ink-muted"> will be raised for this return.</span>
+        </p>
+      )}
 
       <TextAreaField
         id="move-note"
@@ -96,7 +106,31 @@ export function MoveForm({ form, errors, distributors, batches, available, unit,
       <FormSection title="Take stock back">
         <Fixed label="Distributor" value={holding.distributorName} />
         <Fixed label="Item" value={holding.itemName} />
-        <Fixed label="Batch" value={holding.batchNo} className="sm:col-span-2" />
+
+        {/* The holding is item-wise, but the goods go back into a real batch.
+            We know which batches we sent them, so those are the choices — and
+            when there is only one there is nothing to choose. */}
+        {batchesHeld.length > 1 ? (
+          <SelectField
+            id="move-batch"
+            label="Back into which batch"
+            required
+            placeholder="Choose the batch"
+            limit={SHOWN}
+            options={batchesHeld.map((batch) => ({
+              value: batch.batchId,
+              label: batch.batchNo,
+              hint: `${batch.outstanding} with them${batch.expiryDate ? ` · expires ${batch.expiryDate}` : ''}`,
+            }))}
+            value={form.batchId}
+            onChange={(v) => onChange('batchId', v)}
+            error={errors.batchId}
+            className="sm:col-span-2"
+          />
+        ) : (
+          <Fixed label="Batch" value={batchesHeld[0]?.batchNo ?? '—'} className="sm:col-span-2" />
+        )}
+
         {rest}
       </FormSection>
     )

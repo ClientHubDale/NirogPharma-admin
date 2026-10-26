@@ -43,6 +43,12 @@ export async function returnStock(body) {
   return { batch: data.data.batch, message: data.message }
 }
 
+/** The admin's own figure for stock a distributor held before we started. */
+export async function setDistributorOpening(body) {
+  const { data } = await api.put('/stocks/distributors/opening', body)
+  return { opening: data.data.opening, message: data.message }
+}
+
 export async function listDistributorStock(params = {}) {
   const { data } = await api.get('/stocks/distributors', query(params))
   return { rows: data.data.rows, total: data.meta?.total ?? data.data.rows.length }

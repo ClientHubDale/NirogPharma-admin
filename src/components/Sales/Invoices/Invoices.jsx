@@ -28,8 +28,11 @@ import {
   selectInvoicesStatus,
   setInvoiceStatus,
 } from '@/store/invoicesSlice'
-import { selectDocSettings, settingsSaved } from '@/store/transactionsSlice'
-import { TransactionSettingsDialog } from '@/components/Transactions/components/TransactionSettingsDialog'
+import { fetchSettings, saveSettingsGroup, selectInvoiceSettings } from '@/store/settingsSlice'
+import {
+  INVOICE_TOGGLES,
+  TransactionSettingsDialog,
+} from '@/components/Transactions/components/TransactionSettingsDialog'
 import { buildInvoiceColumns, DEFAULT_INVOICE_VISIBILITY, INVOICE_COLUMN_OPTIONS } from './components/InvoicesTable'
 import { INVOICE_STATUSES, STATUS_LABEL } from './invoiceModel'
 
@@ -55,7 +58,7 @@ export default function Invoices() {
   const loadStatus = useSelector(selectInvoicesStatus)
   const loadError = useSelector(selectInvoicesError)
   const distributors = useSelector(selectDistributors)
-  const settings = useSelector(selectDocSettings('SALES_INVOICE'))
+  const invoiceSettings = useSelector(selectInvoiceSettings)
   const routes = useSelector(selectRoutes)
   const cities = useSelector(selectCities)
 
@@ -71,6 +74,7 @@ export default function Invoices() {
   const [highlightId] = useState(location.state?.highlightId ?? null)
 
   useEffect(() => {
+    dispatch(fetchSettings())
     dispatch(fetchInvoices({}))
     dispatch(fetchDistributors())
   }, [dispatch])
@@ -395,14 +399,22 @@ export default function Invoices() {
         )}
       </section>
 
+      {/* These switches are the server's, so turning one off really does take
+          the field off the create screen and off the printed bill. */}
       <TransactionSettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        settings={settings}
+        settings={invoiceSettings}
+        toggles={INVOICE_TOGGLES}
+        extras={false}
         noun="sales invoice"
-        onSave={(s) => {
-          dispatch(settingsSaved({ type: 'SALES_INVOICE', settings: s }))
-          setNotice({ tone: 'success', message: 'Sales Invoices settings saved.' })
+        onSave={async (next) => {
+          const result = await dispatch(saveSettingsGroup({ group: 'invoice', patch: next }))
+          setNotice(
+            saveSettingsGroup.rejected.match(result)
+              ? { tone: 'danger', message: 'Could not save those settings.' }
+              : { tone: 'success', message: 'Saved — every new bill follows it.' },
+          )
         }}
       />
     </div>

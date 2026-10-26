@@ -49,6 +49,8 @@ export const emptyUserForm = () => ({
   target: '', // monthly sales target
   taPerKm: '',
   stayPerNight: '',
+  // Whatever the road throws up that the others do not name.
+  miscAllowance: '',
   daPerDay: '',
   incentivePercent: '',
 })
@@ -80,6 +82,7 @@ export const formToUser = (form, id) => ({
   taPerKm: Number(form.taPerKm) || 0,
   daPerDay: Number(form.daPerDay) || 0,
   stayPerNight: Number(form.stayPerNight) || 0,
+  miscAllowance: Number(form.miscAllowance) || 0,
   incentivePercent: Number(form.incentivePercent) || 0,
 })
 
@@ -101,7 +104,7 @@ export function validateUserForm(form, { users, editingId }) {
   }
   if (form.reportingTo && form.reportingTo === editingId) e.reportingTo = 'A user cannot report to themselves.'
   // Payout rates
-  for (const [field, label] of [['salary', 'Salary'], ['target', 'Target'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day'], ['stayPerNight', 'Stay allowance']]) {
+  for (const [field, label] of [['salary', 'Salary'], ['target', 'Target'], ['taPerKm', 'TA per km'], ['daPerDay', 'DA per day'], ['stayPerNight', 'Stay allowance'], ['miscAllowance', 'Miscellaneous']]) {
     if (form[field] !== '' && !(Number(form[field]) >= 0)) e[field] = `${label} cannot be negative.`
   }
   if (form.incentivePercent !== '' && !(Number(form.incentivePercent) >= 0 && Number(form.incentivePercent) <= 100))

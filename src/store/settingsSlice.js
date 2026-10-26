@@ -31,6 +31,11 @@ const initialState = {
   // What a bill must carry before it can be issued, and the terms printed on
   // it. The server owns these — the invoice screen reads them on every load.
   invoice: { vehicleNoRequired: false, ewayBillRequired: false, ewayBillThreshold: 50000, terms: '' },
+  // When a stock figure should start shouting, and after how long unsold stock
+  // counts as slow. The server colours by these; the screens explain them.
+  stock: { lowFactory: 100, lowDistributor: 10, slowMovingDays: 15 },
+  /** The letterhead on the printed bill — every value the admin's to change. */
+  billCompany: {},
   status: 'idle',
   error: null,
   mobileApp: {
@@ -46,6 +51,9 @@ const initialState = {
     salaryPerDayTracking: true, // day-by-day working, not just the month's total
   },
 }
+
+/** Where each server-side settings group lives in this slice. */
+const GROUP_TO_STATE = { company: 'billCompany' }
 
 export const fetchSettings = createAsyncThunk('settings/fetch', async (_, { rejectWithValue }) => {
   try {
@@ -88,13 +96,21 @@ const settingsSlice = createSlice({
         state.error = null
         if (payload.bank) state.bank = { ...state.bank, ...payload.bank }
         if (payload.invoice) state.invoice = { ...state.invoice, ...payload.invoice }
+        if (payload.stock) state.stock = { ...state.stock, ...payload.stock }
+        // The letterhead the bill prints, saved on the server.
+        if (payload.company) state.billCompany = { ...(state.billCompany ?? {}), ...payload.company }
       })
       .addCase(fetchSettings.rejected, (state, { payload }) => {
         state.status = 'failed'
         state.error = payload?.message ?? 'Could not load settings.'
       })
       .addCase(saveSettingsGroup.fulfilled, (state, { payload }) => {
-        state[payload.group] = { ...state[payload.group], ...payload.settings }
+        // The server's "company" group is the bill's letterhead, which is not
+        // the same thing as this screen's own company block — so it lands in
+        // the same place a load puts it, or a save would quietly overwrite the
+        // wrong slice and the bill would not redraw.
+        const key = GROUP_TO_STATE[payload.group] ?? payload.group
+        state[key] = { ...state[key], ...payload.settings }
       })
   },
 })
@@ -106,6 +122,10 @@ export const selectBank = (state) => state.settings.bank
 export const selectMobileApp = (state) => state.settings.mobileApp
 /** What a bill must carry, and the terms printed under it. */
 export const selectInvoiceSettings = (state) => state.settings.invoice
+/** When a stock figure turns orange or red. */
+export const selectStockSettings = (state) => state.settings.stock
+/** The letterhead the printed bill carries. */
+export const selectCompanySettings = (state) => state.settings.billCompany
 /** Attendance reads the office window from here. */
 export const selectOfficeTime = (state) => state.settings.office
 export default settingsSlice.reducer

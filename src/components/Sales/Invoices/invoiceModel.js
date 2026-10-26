@@ -33,6 +33,8 @@ export const emptyInvoiceForm = (defaults = {}) => ({
   ewayBillNo: '',
   station: '',
   packages: '',
+  shipTo: '',
+  proforma: false,
   note: '',
   terms: '',
   lines: [emptyLine()],
@@ -50,6 +52,8 @@ export const invoiceToForm = (invoice) => ({
   ewayBillNo: invoice.ewayBillNo ?? '',
   station: invoice.station ?? '',
   packages: invoice.packages === '' || invoice.packages == null ? '' : String(invoice.packages),
+  shipTo: invoice.shipTo ?? '',
+  proforma: Boolean(invoice.proforma),
   note: invoice.note ?? '',
   terms: invoice.terms ?? '',
   lines: invoice.lines.map((line) => ({
@@ -70,6 +74,8 @@ export const formToPayload = (form) => ({
   ewayBillNo: form.ewayBillNo.trim(),
   station: form.station.trim(),
   packages: form.packages.trim(),
+  shipTo: form.shipTo.trim(),
+  proforma: Boolean(form.proforma),
   note: form.note.trim(),
   terms: form.terms.trim(),
   lines: form.lines

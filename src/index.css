@@ -204,12 +204,17 @@
  * into are flattened so they print as text rather than as boxes.
  */
 @media print {
-  body * {
+  /* Only a page that carries the panel around the bill needs the panel hidden.
+     The standalone print sheet has no chrome at all, so hiding everything there
+     left three blank pages. */
+  body:has(#bill-sheet) * {
     visibility: hidden;
   }
 
-  #bill-sheet,
-  #bill-sheet * {
+  /* Scoped the same way as the rule above, or it would lose to it: a
+     `:has()` selector carries its argument's specificity. */
+  body:has(#bill-sheet) #bill-sheet,
+  body:has(#bill-sheet) #bill-sheet * {
     visibility: visible;
   }
 

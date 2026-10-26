@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Gift, PackageSearch, Plus, Trash2 } from 'lucide-react'
+import { PhotoViewer } from '@/components/common/PhotoViewer'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { formatPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -42,7 +44,15 @@ function NumberCell({ value, onChange, label, prefix, invalid, readOnly, width =
  * Rate is not typed: it comes from the distributor's rate column, with the GST
  * taken back out of it, and the server has the last word on save.
  */
-export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, tiers, disabled, interState = false }) {
+export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, tiers, disabled, interState = false, taxRate }) {
+  // The headers name the rate, the same way the printed bill does.
+  const pct = (value) => String(Number(Number(value).toFixed(2)))
+  const rates = [...new Set(form.lines.filter((l) => l.itemId).map((l) => Number(items.find((i) => i.id === l.itemId)?.gst) || 0))]
+  const one = rates.length === 1 ? rates[0] : rates.length === 0 ? Number(taxRate) || null : null
+  const half = one === null ? '' : ` (${pct(one / 2)}%)`
+  const full = one === null ? '' : ` (${pct(one)}%)`
+  // A free item's photo, opened full screen.
+  const [gift, setGift] = useState(null)
   const setLine = (index, patch) =>
     onChange(
       'lines',
@@ -83,9 +93,9 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
               <th className="w-20 px-1 py-2 text-right">MRP</th>
               <th className="w-20 px-1 py-2 text-right">Rate</th>
               <th className="w-24 px-1 py-2 text-right">Taxable<br />value</th>
-              <th className="w-20 px-1 py-2 text-right">CGST</th>
-              <th className="w-20 px-1 py-2 text-right">SGST</th>
-              <th className="w-20 px-1 py-2 text-right">IGST</th>
+              <th className="w-20 px-1 py-2 text-right">CGST{half}</th>
+              <th className="w-20 px-1 py-2 text-right">SGST{half}</th>
+              <th className="w-20 px-1 py-2 text-right">IGST{full}</th>
               <th className="w-10 px-2 py-2">
                 <span className="sr-only">Remove</span>
               </th>
@@ -134,7 +144,17 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
                       {free && (
                         <span className="inline-flex items-center gap-1.5 font-semibold text-green-deep">
                           {freeImage ? (
-                            <img src={freeImage} alt="" className="size-5 shrink-0 rounded border border-mint-pale object-cover" />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setGift({ src: freeImage, name: free })
+                              }}
+                              title={`See ${free} larger`}
+                              className="shrink-0 rounded outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+                            >
+                              <img src={freeImage} alt={free} className="size-5 rounded border border-mint-pale object-cover transition-transform hover:scale-125" />
+                            </button>
                           ) : (
                             <Gift className="size-3" />
                           )}
@@ -267,6 +287,8 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
           </tbody>
         </table>
       </div>
+
+      <PhotoViewer open={Boolean(gift)} src={gift?.src} title={gift?.name ?? ''} onClose={() => setGift(null)} />
 
       {/* No "+ New" here: the client does not create items while billing. */}
       <div className="flex items-center gap-3 border-t border-mint-pale p-4">

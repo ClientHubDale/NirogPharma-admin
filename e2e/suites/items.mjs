@@ -447,4 +447,24 @@ await cleanup()
 const left = await api('/items?limit=200')
 ok('the suite leaves nothing behind', !(left?.data?.items ?? []).some((i) => i.name.startsWith('E2E ')))
 
+/* ── a product photo opens full screen ───────────────────────────────── */
+
+await goto(page, '/admin/inventory/items', { heading: 'Items' })
+await sleep(1600)
+const itemPhoto = await page.$('button[title^="See "]')
+ok('a product photo can be opened', Boolean(itemPhoto))
+if (itemPhoto) {
+  await itemPhoto.click()
+  await sleep(800)
+  const viewer = await page.$eval('[role=dialog]', (el) => ({ w: el.clientWidth, h: el.clientHeight }))
+  const screen = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+  ok('and it fills the screen', viewer.w === screen.w && viewer.h === screen.h, `${viewer.w}×${viewer.h} vs ${screen.w}×${screen.h}`)
+  await page.click('button[aria-label="Zoom in"]')
+  await sleep(300)
+  has('…and zooms', await page.$eval('[role=dialog] img', (el) => el.style.transform), 'scale(1.25)')
+  await page.keyboard.press('Escape')
+  await sleep(400)
+  ok('…and closes again', (await page.$('[role=dialog]')) === null)
+}
+
 await finish(browser, errors, { ignore: /status of (400|409)/ })

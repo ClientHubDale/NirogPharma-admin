@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, Loader2, Receipt, Smartphone } from 'lucide-react'
+import { Building2, FileText, Loader2, Receipt, Smartphone } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Notice } from '@/components/data/Notice'
 import { Button } from '@/components/ui/button'
@@ -11,12 +11,14 @@ import {
   saveSettingsGroup,
   selectBank,
   selectCompany,
+  selectCompanySettings,
   selectInvoiceSettings,
   selectMobileApp,
   selectOffice,
 } from '@/store/settingsSlice'
 import { selectUsers } from '@/store/usersSlice'
 import { BillingSettings } from './components/BillingSettings'
+import { BillTemplate } from './components/BillTemplate'
 import { CompanySettings } from './components/CompanySettings'
 import { MobileAppSettings } from './components/MobileAppSettings'
 import { cleanHolidays, validateCompany } from './settingsModel'
@@ -24,6 +26,7 @@ import { cleanHolidays, validateCompany } from './settingsModel'
 const TABS = [
   { id: 'company', label: 'Company', icon: Building2, title: 'Company details' },
   { id: 'billing', label: 'Billing', icon: Receipt, title: 'Billing settings' },
+  { id: 'template', label: 'Bill template', icon: FileText, title: 'What the printed bill says' },
   { id: 'mobile', label: 'Mobile app', icon: Smartphone, title: 'Mobile app settings' },
 ]
 
@@ -35,12 +38,14 @@ export default function Settings() {
   const savedBank = useSelector(selectBank)
   const savedMobileApp = useSelector(selectMobileApp)
   const savedInvoice = useSelector(selectInvoiceSettings)
+  const savedBillCompany = useSelector(selectCompanySettings)
   const staff = useSelector(selectUsers).filter((user) => user.role !== 'ADMIN')
 
   const [tab, setTab] = useState('company')
   const [form, setForm] = useState({ company: savedCompany, office: savedOffice, bank: savedBank })
   const [mobileApp, setMobileApp] = useState(savedMobileApp)
   const [invoice, setInvoice] = useState(savedInvoice)
+  const [template, setTemplate] = useState({ company: savedBillCompany, bank: savedBank })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
@@ -52,11 +57,12 @@ export default function Settings() {
   // The server owns the bank and billing groups. When a load or a save brings
   // new values in, the draft on screen is reset to them — adjusted during the
   // render that notices, rather than in an effect that would render twice.
-  const [serverCopy, setServerCopy] = useState({ bank: savedBank, invoice: savedInvoice })
-  if (serverCopy.bank !== savedBank || serverCopy.invoice !== savedInvoice) {
-    setServerCopy({ bank: savedBank, invoice: savedInvoice })
+  const [serverCopy, setServerCopy] = useState({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany })
+  if (serverCopy.bank !== savedBank || serverCopy.invoice !== savedInvoice || serverCopy.company !== savedBillCompany) {
+    setServerCopy({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany })
     if (serverCopy.bank !== savedBank) setForm((f) => ({ ...f, bank: savedBank }))
     if (serverCopy.invoice !== savedInvoice) setInvoice(savedInvoice)
+    setTemplate({ company: savedBillCompany, bank: savedBank })
   }
 
   const changeInvoice = (field, value) => setInvoice((state) => ({ ...state, [field]: value }))
@@ -76,6 +82,18 @@ export default function Settings() {
       }
     }
     setSaving(true)
+
+    if (tab === 'template') {
+      const [co, bk] = await Promise.all([
+        dispatch(saveSettingsGroup({ group: 'company', patch: template.company })),
+        dispatch(saveSettingsGroup({ group: 'bank', patch: template.bank })),
+      ])
+      setSaving(false)
+      if (saveSettingsGroup.rejected.match(co) || saveSettingsGroup.rejected.match(bk)) {
+        return setNotice({ tone: 'danger', message: 'Could not save the bill template.' })
+      }
+      return setNotice({ tone: 'success', message: 'Bill template saved — every bill prints with it from now on.' })
+    }
 
     if (tab === 'billing') {
       const result = await dispatch(saveSettingsGroup({ group: 'invoice', patch: invoice }))
@@ -151,6 +169,13 @@ export default function Settings() {
             <CompanySettings company={form.company} office={form.office} bank={form.bank} errors={errors} onChange={change} />
           ) : tab === 'billing' ? (
             <BillingSettings invoice={invoice} onChange={changeInvoice} />
+          ) : tab === 'template' ? (
+            <BillTemplate
+              company={template.company}
+              bank={template.bank}
+              onChange={(key, value) => setTemplate((t) => ({ ...t, company: { ...t.company, [key]: value } }))}
+              onChangeBank={(key, value) => setTemplate((t) => ({ ...t, bank: { ...t.bank, [key]: value } }))}
+            />
           ) : (
             <MobileAppSettings mobileApp={mobileApp} staff={staff} onChange={(field, value) => setMobileApp((m) => ({ ...m, [field]: value }))} />
           )}

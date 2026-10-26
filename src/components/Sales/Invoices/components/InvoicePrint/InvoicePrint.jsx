@@ -58,8 +58,12 @@ function Meta({ label, children }) {
  * screen renders this same sheet with inputs dropped into it through `slots`,
  * so what the admin fills in is literally what comes out of the printer.
  */
-export function InvoicePrint({ invoice, bank, slots = {} }) {
+export function InvoicePrint({ invoice, bank, company: fromSettings, copy, heading, show: showProp, taxRate, slots = {} }) {
   if (!invoice) return null
+
+  // The letterhead is the admin's to change; these are only the fallbacks for
+  // a panel that has not saved any settings yet.
+  const company = { ...BILL_COMPANY, ...(fromSettings ?? {}) }
 
   const slot = (key, printed) => (key in slots ? slots[key] : printed)
 
@@ -77,7 +81,20 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
     ) : (
       printed
     )
-  const editing = Object.keys(slots).length > 0
+  // "Editing" means the items table is the interactive one — not merely that
+  // some control was slotted in, so a bill being reviewed can still carry the
+  // copy dropdown without widening into the create screen's layout.
+  const editing = 'lines' in slots
+  const hasSecondBank = Boolean(bank?.bankName2 || bank?.accountNumber2)
+  const terms = String(company.terms ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 12)
+  if (terms.length === 0) terms.push(...BILL_TERMS)
+  // Which optional fields the admin keeps on the bill. Everything shows unless
+  // settings say otherwise, so a panel with no settings still prints in full.
+  const show = { vehicleNo: true, ewayBillNo: true, creditPeriod: true, ...(showProp ?? {}) }
 
   // The firm arrives flattened from the API and whole from the create screen.
   const firm = {
@@ -95,6 +112,10 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
    * rows, and the money is split across them in proportion to the quantity so
    * the column still adds up to the line.
    */
+  // Goods can go somewhere other than the billing address — "बिल तो आपका नाम
+  // का, और माल दिल्ली भेज दूंगा".
+  const shipsElsewhere = Boolean((invoice.shipTo ?? '').trim())
+
   const lines = (invoice.lines ?? []).flatMap((line) => {
     const batches = line.batches ?? []
     const base = {
@@ -140,10 +161,15 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
   const interState = Boolean(invoice.interState)
   // The tax columns are headed with the rate when every line shares one, which
   // is how the client's own bill reads: CGST (2.5%) · SGST (2.5%) · IGST (5%).
+  // The header states the rate when every line shares one. On a bill with
+  // nothing on it yet, the company's own rate stands in; on a bill of mixed
+  // rates it stays blank, because no single figure would be true.
   const rates = [...new Set(lines.map((line) => Number(line.gstRate) || 0))]
-  const one = rates.length === 1 ? rates[0] : null
-  const halfLabel = one === null ? '' : ` (${(one / 2).toFixed(one % 2 === 0 ? 0 : 2).replace(/\.00$/, '')}%)`
-  const fullLabel = one === null ? '' : ` (${one}%)`
+  const one = rates.length === 1 ? rates[0] : rates.length === 0 ? (Number(taxRate) || null) : null
+  // 2.5%, not 2.50% — the client's own bill reads "CGST (2.5%)".
+  const pct = (value) => String(Number(value.toFixed(2)))
+  const halfLabel = one === null ? '' : ` (${pct(one / 2)}%)`
+  const fullLabel = one === null ? '' : ` (${pct(one)}%)`
 
   const totalQty = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0)
   const totalTaxable = lines.reduce((sum, line) => sum + (Number(line.taxableValue) || 0), 0)
@@ -161,24 +187,44 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
       )}
     >
       <div className="border border-black">
-        <p className="border-b border-black px-1 py-[3px] font-bold">GSTIN- {BILL_COMPANY.gstin}</p>
+        <div className="flex items-start justify-between gap-3 border-b border-black px-1 py-[3px]">
+          <div>
+            <p className="font-bold">GSTIN- {company.gstin}</p>
+            {/* "जी एस टी के नीचे ड्रॉपडाउन बना देना, उसमें तीनों डाल देना" —
+                which copy to print, chosen right where it is printed. */}
+            {slot('copyChoice', null)}
+          </div>
+          {copy && <p className="font-bold uppercase">{copy}</p>}
+        </div>
 
-        <header className="border-b border-black px-2 py-1 text-center">
-          <h1 className="text-[13px] font-bold underline">TAX INVOICE</h1>
-          <p className="text-[15px] font-bold">{BILL_COMPANY.name}</p>
-          <p className="font-bold">{BILL_COMPANY.tagline}</p>
-          <p>{BILL_COMPANY.address}</p>
-          <p>{BILL_COMPANY.registration}</p>
-          <p>{BILL_COMPANY.phone}</p>
-          <p className="underline">E-Mail: {BILL_COMPANY.email}</p>
-          <p>WEBSITE : {BILL_COMPANY.website}</p>
+        <header className="relative border-b border-black px-2 py-1 text-center">
+          {/* The words over the bill are the admin's: "TAX INVOICE" today,
+              "PROFORMA INVOICE" when they are quoting. */}
+          <h1 className="text-[13px] font-bold underline">{heading || company.heading || 'TAX INVOICE'}</h1>
+          <p className="text-[15px] font-bold">{company.name}</p>
+          <p className="font-bold">{company.tagline}</p>
+          <p>{company.address}</p>
+          <p>
+            CIN NO: {company.cin}, UDYAM REGISTRATION NO.- {company.udyam}
+          </p>
+          <p>PH. {company.phone}</p>
+          <p className="underline">E-Mail: {company.email}</p>
+          <p>WEBSITE : {company.website}</p>
+          {/* "राइट साइड में जो गैप है न ऊपर डाल दो लोगो" */}
+          {company.logoUrl && (
+            <img src={company.logoUrl} alt="" className="absolute top-1 right-2 max-h-14 max-w-28 object-contain" />
+          )}
         </header>
-        <p className="border-b border-black py-[3px] text-center font-bold">{BILL_COMPANY.licence}</p>
+        <p className="border-b border-black py-[3px] text-center font-bold">
+          {company.goodsHeading} DRUG LICENSE NO.- {company.drugLicence}
+        </p>
 
-        {/* Buyer on the left, the bill's own particulars on the right. */}
-        <div className="grid grid-cols-[1fr_20rem]">
+        {/* "जहाँ पर बायर्स डीटेल लिखा है वहाँ पर हम लिखेंगे बिल टू, और सेंटर से
+            दूसरा बॉक्स चालू होगा, वहाँ लिखा जाएगा शिप टू." The bill names who
+            pays on the left and where the goods go on the right. */}
+        <div className="grid grid-cols-[1fr_1fr_20rem]">
           <section className="border-r border-black px-2 py-1">
-            <p className="font-bold">Buyer&apos;s Detail:</p>
+            <p className="font-bold">BILL TO:</p>
             {slot(
               'billTo',
               <>
@@ -191,14 +237,31 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
             )}
           </section>
 
+          <section className="border-r border-black px-2 py-1">
+            <p className="font-bold">SHIP TO:</p>
+            {slot(
+              'shipTo',
+              shipsElsewhere ? (
+                <p className="whitespace-pre-line">{invoice.shipTo}</p>
+              ) : (
+                <>
+                  <p className="font-bold">M/S {firm.name}</p>
+                  {firm.address && <p className="whitespace-pre-line">{firm.address}</p>}
+                  <p>{[firm.state, firm.pincode].filter(Boolean).join(', ')}</p>
+                  <p className="text-ink-muted">Same as billing</p>
+                </>
+              ),
+            )}
+          </section>
+
           <section className="space-y-[1px] px-2 py-1">
             <Meta label="INVOICE NO.">{slot('invoiceNo', invoice.invoiceNo)}</Meta>
             <Meta label="DATE">{slot('invoiceDate', billDate(invoice.invoiceDate))}</Meta>
             <Meta label="TRANSPORT">{slot('transport', invoice.transport || '')}</Meta>
-            <Meta label="VEHICLE NO.">{slot('vehicleNo', invoice.vehicleNo || '')}</Meta>
-            {invoice.ewayBillNo || 'ewayBillNo' in slots ? (
-              <Meta label="E-WAY BILL NO.">{slot('ewayBillNo', invoice.ewayBillNo || '')}</Meta>
-            ) : null}
+            {/* Switched off in settings, a field leaves the form and the paper
+                both — "यहाँ से ऑफ करके सेव कर दो तो पीडीएफ में भी नहीं दिखेगा". */}
+            {show.vehicleNo && <Meta label="VEHICLE NO.">{slot('vehicleNo', invoice.vehicleNo || '')}</Meta>}
+            {show.ewayBillNo && <Meta label="E-WAY BILL NO.">{slot('ewayBillNo', invoice.ewayBillNo || '')}</Meta>}
             <Meta label="PLACE OF SUPPLY">{placeOfSupply(firm.state)}</Meta>
             <Meta label="STATION">{slot('station', invoice.station || '')}</Meta>
             {/* Credit period and the like: the system needs them, the printed
@@ -230,7 +293,7 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
             <tbody>
               <tr>
                 <Cell />
-                <Cell className="text-left font-bold">{BILL_COMPANY.goodsHeading}</Cell>
+                <Cell className="text-left font-bold">{company.goodsHeading}</Cell>
                 {Array.from({ length: 12 }, (_, i) => (
                   <Cell key={i} />
                 ))}
@@ -288,21 +351,32 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
         <div className="grid grid-cols-[1fr_17rem] border-t border-black">
           <section className="border-r border-black">
             <p className="border-b border-black py-[3px] text-center font-bold">OUR BANK DETAILS</p>
-            <table className="w-full border-collapse">
-              <tbody>
-                {[
-                  ['BANK NAME :', bank?.bankName],
-                  ['BRANCH :', bank?.branch],
-                  ['IFSC CODE :', bank?.ifsc],
-                  ['ACCOUNT NO. :', bank?.accountNumber],
-                ].map(([label, value]) => (
-                  <tr key={label}>
-                    <Cell className="w-28 border-0 border-r border-b border-black font-bold">{label}</Cell>
-                    <Cell className="border-0 border-b border-black text-center font-bold">{value || ''}</Cell>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {/* Two accounts side by side, with the barcode beside them. */}
+            <div className="flex">
+              <table className="w-full border-collapse">
+                <tbody>
+                  {[
+                    ['BANK NAME :', bank?.bankName, bank?.bankName2],
+                    ['BRANCH :', bank?.branch, bank?.branch2],
+                    ['IFSC CODE :', bank?.ifsc, bank?.ifsc2],
+                    ['ACCOUNT NO. :', bank?.accountNumber, bank?.accountNumber2],
+                  ].map(([label, first, second]) => (
+                    <tr key={label}>
+                      <Cell className="w-24 border-0 border-r border-b border-black font-bold">{label}</Cell>
+                      <Cell className="border-0 border-r border-b border-black text-center font-bold">{first || ''}</Cell>
+                      {hasSecondBank && (
+                        <Cell className="border-0 border-r border-b border-black text-center font-bold">{second || ''}</Cell>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {bank?.barcodeUrl && (
+                <div className="grid w-24 shrink-0 place-items-center border-b border-black p-1">
+                  <img src={bank.barcodeUrl} alt="Scan to pay" className="max-h-20 max-w-full object-contain" />
+                </div>
+              )}
+            </div>
           </section>
 
           <table className="w-full border-collapse self-start">
@@ -343,8 +417,10 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
               <p className="font-bold underline">TERMS &amp; CONDITION</p>
               <p>E. &amp; O.E.</p>
             </div>
+            {/* The conditions are the company's and change; they are typed in
+                the bill template, one to a line, and numbered here. */}
             <ol className="mt-0.5 list-decimal space-y-[1px] pl-4 text-[8px]">
-              {BILL_TERMS.map((term) => (
+              {terms.map((term) => (
                 <li key={term}>{term}</li>
               ))}
             </ol>
@@ -353,8 +429,13 @@ export function InvoicePrint({ invoice, bank, slots = {} }) {
             <p className="font-bold underline">RECEIVER&apos;S SIGNATURE</p>
           </section>
           <section className="flex flex-col justify-between px-2 py-1 text-center">
-            <p className="font-bold">FOR {BILL_COMPANY.name}</p>
-            <p className="mt-10 font-bold">AUTHORISED SIGNATORY</p>
+            <p className="font-bold">FOR {company.name}</p>
+            {company.signatureUrl ? (
+              <img src={company.signatureUrl} alt="" className="mx-auto my-1 max-h-12 object-contain" />
+            ) : (
+              <span className="block h-10" />
+            )}
+            <p className="font-bold">AUTHORISED SIGNATORY</p>
           </section>
         </div>
       </div>

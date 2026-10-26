@@ -10,12 +10,14 @@ import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { Modal } from '@/components/common/Modal'
+import { PhotoViewer } from '@/components/common/PhotoViewer'
 import { StatusPill } from '@/components/data/StatusPill'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { Button } from '@/components/ui/button'
 import { useItems } from '@/hooks/useItems'
 import { INITIAL_CATEGORIES } from '@/mocks/items'
 import { fetchDistributors, selectDistributors } from '@/store/distributorsSlice'
+import { fetchSettings, selectStockSettings } from '@/store/settingsSlice'
 import {
   fetchBatches,
   fetchStockSummary,
@@ -69,15 +71,6 @@ const FIELD_IDS = {
  * it holds at the end. Issuing to a distributor is one movement, so the other
  * stock screen is the same data seen from the other side.
  */
-/** The figures the totals strip adds up, in column order. */
-const TOTAL_FIGURES = [
-  { key: 'opening', label: 'Opening' },
-  { key: 'in', label: 'In' },
-  { key: 'out', label: 'Out' },
-  { key: 'returned', label: 'Return' },
-  { key: 'closing', label: 'Closing' },
-]
-
 export default function FactoryStocks() {
   const dispatch = useDispatch()
   const toast = useToast()
@@ -87,6 +80,12 @@ export default function FactoryStocks() {
   const summary = useSelector(selectStockSummary)
   const distributors = useSelector(selectDistributors)
   const items = useItems()
+  // When the factory figure starts shouting — "फैक्ट्री के सौ कर दो".
+  const lowAt = useSelector(selectStockSettings).lowFactory
+
+  // The product photo, opened larger: "जहाँ भी आप क्लिक करोगे वो आइटम पे, तो
+  // बड़े स्केल में दिखेगा".
+  const [photo, setPhoto] = useState(null)
 
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
@@ -118,6 +117,7 @@ export default function FactoryStocks() {
     dispatch(fetchBatches({ from, to }))
     dispatch(fetchStockSummary())
     dispatch(fetchDistributors())
+    dispatch(fetchSettings())
   }, [dispatch, period])
 
   /**
@@ -176,25 +176,6 @@ export default function FactoryStocks() {
       .sort((a, b) => a.itemName.localeCompare(b.itemName))
   }, [batches, search, category, expiry])
 
-  /**
-   * "अब यहाँ पे ऊपर टोटल लिखेंगे आपको" — the column totals for everything the
-   * filters leave in, not only the page on screen.
-   */
-  const totals = useMemo(
-    () =>
-      itemRows.reduce(
-        (sum, row) => ({
-          opening: sum.opening + row.opening,
-          in: sum.in + row.in,
-          out: sum.out + row.out,
-          returned: sum.returned + row.returned,
-          closing: sum.closing + row.closing,
-        }),
-        { opening: 0, in: 0, out: 0, returned: 0, closing: 0 },
-      ),
-    [itemRows],
-  )
-
   /** Item lines, each followed by its batch lines when it is open. */
   const filtered = useMemo(
     () => itemRows.flatMap((row) => (expanded.has(row.itemId) ? [row, ...row.batches] : [row])),
@@ -231,11 +212,13 @@ export default function FactoryStocks() {
         onDelete: (batch) => destroy(batch),
         onItemHistory: (row) => openHistory(row),
         onLedger: (batch) => openLedger(batch),
+        onItemImage: (entry) => setPhoto(entry),
         expanded,
         onToggle: toggle,
+        lowAt,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [expanded],
+    [expanded, lowAt],
   )
 
   /** Every batch of one item for the whole financial year — "1 अप्रैल से अभी तक". */
@@ -471,22 +454,6 @@ export default function FactoryStocks() {
           />
         </div>
 
-        {itemRows.length > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-mint-pale bg-mint-pale/40 px-4 py-2.5">
-            <span className="text-xs font-bold tracking-wide text-forest uppercase">
-              Total · {itemRows.length} {itemRows.length === 1 ? 'item' : 'items'}
-            </span>
-            {TOTAL_FIGURES.map(({ key, label }) => (
-              <span key={key} className="flex items-baseline gap-1.5">
-                <span className="text-xs text-ink-muted">{label}</span>
-                <span className="font-mono text-sm font-bold text-black tabular-nums">
-                  {totals[key].toLocaleString('en-IN')}
-                </span>
-              </span>
-            ))}
-          </div>
-        )}
-
         {loadStatus === 'loading' && !batches.length ? (
           <div className="grid min-h-60 place-items-center" role="status" aria-label="Loading stock">
             <span className="size-8 animate-spin rounded-full border-3 border-mint border-t-green-deep" />
@@ -543,6 +510,15 @@ export default function FactoryStocks() {
       >
         {drawer && <BatchForm form={drawer.form} errors={drawer.errors} items={items} onChange={updateField} />}
       </FormDrawer>
+
+      {/* The product photo on the whole screen, zoomable. */}
+      <PhotoViewer
+        open={Boolean(photo)}
+        src={photo?.itemImage}
+        title={photo?.itemName ?? ''}
+        subtitle={photo?.itemCode}
+        onClose={() => setPhoto(null)}
+      />
 
       <Modal
         open={Boolean(ledger)}

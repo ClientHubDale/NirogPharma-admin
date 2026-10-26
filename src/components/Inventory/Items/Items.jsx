@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { FileDown, FileUp, PackageSearch, Plus } from 'lucide-react'
+import { PhotoViewer } from '@/components/common/PhotoViewer'
 import { ColumnSettings } from '@/components/data/ColumnSettings'
 import { DataTable } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
@@ -258,10 +259,13 @@ export default function Items() {
 
   // Handlers are stable-enough closures over state; rebuild columns when they change.
   const columns = useMemo(
-    () => buildItemColumns({ onEdit: openEdit, onToggleStatus: toggleStatus, onDelete: remove }),
+    () => buildItemColumns({ onEdit: openEdit, onToggleStatus: toggleStatus, onDelete: remove, onImage: (item) => setPhoto(item) }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items],
   )
+
+  // The product photo, opened full screen.
+  const [photo, setPhoto] = useState(null)
 
   /* ── export / import ──────────────────────────────────── */
 
@@ -459,6 +463,14 @@ export default function Items() {
         requiredNote={ITEM_IMPORT_REQUIRED}
         onDownloadSample={downloadSample}
         onSubmit={importFile}
+      />
+
+      <PhotoViewer
+        open={Boolean(photo)}
+        src={photo?.images?.[0]?.url}
+        title={photo?.name ?? ''}
+        subtitle={photo?.code}
+        onClose={() => setPhoto(null)}
       />
 
       <FormDrawer

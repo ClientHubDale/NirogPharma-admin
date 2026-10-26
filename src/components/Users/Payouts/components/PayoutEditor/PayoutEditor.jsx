@@ -13,6 +13,7 @@ const workingOut = (key, calc, user) => {
   if (key === 'ta') return `${calc.distanceKm} km × ${formatPrice(user.taPerKm || 0)} per km`
   if (key === 'da') return `${calc.presentDays} days × ${formatPrice(user.daPerDay || 0)} per day`
   if (key === 'stay') return `${calc.stayNights} ${calc.stayNights === 1 ? 'night' : 'nights'} × ${formatPrice(user.stayPerNight || 0)} per night`
+  if (key === 'misc') return `${formatPrice(user.miscAllowance || 0)} a month, whatever came up`
   return `${user.incentivePercent || 0}% of ${formatPrice(calc.soldValue)} sold`
 }
 

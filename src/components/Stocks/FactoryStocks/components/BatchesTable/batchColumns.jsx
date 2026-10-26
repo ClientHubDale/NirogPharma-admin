@@ -64,7 +64,7 @@ function ExpiryCell({ batch }) {
  * lines underneath are the batch numbers and their expiry dates, the finished
  * ones among them marked as such.
  */
-export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, onLedger, expanded, onToggle }) {
+export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, onLedger, onItemImage, expanded, onToggle, lowAt = 0 }) {
   return helper.columns([
     helper.accessor('itemName', {
       id: 'item',
@@ -83,12 +83,22 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, on
             {/* The product photo, falling back to its initials — the client
                 asked for it here: "यहाँ पे ये नहीं दिख रहा न इमेज". */}
             {entry.itemImage ? (
-              <img
-                src={entry.itemImage}
-                alt=""
-                className="size-9 shrink-0 rounded-lg border border-mint-pale object-cover"
-                loading="lazy"
-              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onItemImage(entry)
+                }}
+                title={`See ${entry.itemName} larger`}
+                className="shrink-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+              >
+                <img
+                  src={entry.itemImage}
+                  alt={entry.itemName}
+                  className="size-9 rounded-lg border border-mint-pale object-cover transition-transform hover:scale-110"
+                  loading="lazy"
+                />
+              </button>
             ) : (
               <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-mint-pale text-xs font-bold text-forest" aria-hidden>
                 {initialsOf(entry.itemName.replace(/^Nirog\s+/, ''))}
@@ -155,15 +165,28 @@ export function buildBatchColumns({ onEdit, onIssue, onDelete, onItemHistory, on
     helper.accessor('closing', {
       header: 'Closing',
       meta: { align: 'right' },
-      cell: ({ row }) =>
-        row.original.kind === 'item' ? (
+      cell: ({ row }) => {
+        if (row.original.kind !== 'item') {
+          return <span className="font-mono font-normal text-ink-muted tabular-nums">{qty(row.original.closing)}</span>
+        }
+        // "फैक्ट्री के सौ कर दो" — only the closing figure goes red, and only
+        // on the item line: a single batch running low says nothing on its own.
+        const low = lowAt > 0 && row.original.closing <= lowAt
+        return (
           <span className="inline-flex flex-col items-end">
-            <span className="font-mono font-bold text-black tabular-nums">{qty(row.original.closing)}</span>
+            <span
+              title={low ? `Running low — only ${qty(row.original.closing)} ${row.original.unit} left in the factory` : undefined}
+              className={cn(
+                'font-mono font-bold tabular-nums',
+                low ? 'rounded bg-danger-soft px-1.5 py-0.5 text-danger-ink' : 'text-black',
+              )}
+            >
+              {qty(row.original.closing)}
+            </span>
             <span className="text-xs font-normal text-ink-muted">{row.original.unit}</span>
           </span>
-        ) : (
-          <span className="font-mono font-normal text-ink-muted tabular-nums">{qty(row.original.closing)}</span>
-        ),
+        )
+      },
     }),
     helper.display({
       id: 'actions',

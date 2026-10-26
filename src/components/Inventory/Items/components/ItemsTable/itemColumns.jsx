@@ -35,7 +35,7 @@ function StockCell({ item }) {
 }
 
 /** Columns for the Items table. Handlers come from the page. */
-export function buildItemColumns({ onEdit, onToggleStatus, onDelete }) {
+export function buildItemColumns({ onEdit, onToggleStatus, onDelete, onImage }) {
   return helper.columns([
     helper.accessor('name', {
       header: 'Item',
@@ -45,7 +45,21 @@ export function buildItemColumns({ onEdit, onToggleStatus, onDelete }) {
         return (
           <div className="flex min-w-[15rem] items-center gap-3">
             {image ? (
-              <img src={image} alt="" className="size-10 shrink-0 rounded-lg border border-mint-pale object-cover" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onImage(item)
+                }}
+                title={`See ${item.name} larger`}
+                className="shrink-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+              >
+                <img
+                  src={image}
+                  alt={item.name}
+                  className="size-10 rounded-lg border border-mint-pale object-cover transition-transform hover:scale-110"
+                />
+              </button>
             ) : (
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-mint-pale text-xs font-bold text-forest" aria-hidden>
                 {initialsOf(item.name.replace(/^Nirog\s+/, ''))}

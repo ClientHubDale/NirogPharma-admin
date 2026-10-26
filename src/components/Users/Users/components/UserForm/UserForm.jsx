@@ -206,6 +206,19 @@ export function UserForm({ form, errors, onChange, editing, userOptions, distrib
           onChange={(e) => onChange('stayPerNight', e.target.value.replace(/[^\d.]/g, ''))}
           error={errors.stayPerNight}
         />
+        {/* "किसी को फिंगरप्रिंट निकलवाए हैं, कुछ कुरियर किया" — the small
+            outlays a month throws up that no other allowance names. */}
+        <TextField
+          id="usr-misc"
+          label="Miscellaneous per month"
+          size="md"
+          inputMode="decimal"
+          placeholder="0"
+          prefix={<span className="pl-3 text-sm text-ink-muted">₹</span>}
+          value={form.miscAllowance}
+          onChange={(e) => onChange('miscAllowance', e.target.value.replace(/[^\d.]/g, ''))}
+          error={errors.miscAllowance}
+        />
       </FormSection>
     </div>
   )

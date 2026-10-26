@@ -222,15 +222,19 @@ eq('and the movement carries the invoice number', (await api(`/stocks/batches/${
 await goto(page, '/admin/stocks/distributor', { heading: 'Distributor Stocks' })
 await sleep(800)
 const holdings = await pageText(page)
-has('the distributor now holds the batch', holdings, BATCH)
+// The holding is item-wise now, so the screen names the item, not the batch.
+has('the distributor now holds the item', holdings, ITEM.name)
 has('against their own name', holdings, distributor.name)
 
-const held = (await api('/stocks/distributors')).data.rows.find((row) => row.batchNo === BATCH)
+const held = (await api('/stocks/distributors')).data.rows.find(
+  (row) => row.distributorId === distributor.id && row.itemName === ITEM.name,
+)
 eq('and the figure is the 40 that went out', held?.held, 40)
+ok('the batch it came on still travels with the row', (held?.batches ?? []).some((b) => b.batchNo === BATCH), JSON.stringify(held?.batches))
 
 /* ── a return sends it back ───────────────────────────────────────────── */
 
-await openRowMenu(`Actions for ${distributor.name} batch ${BATCH}`)
+await openRowMenu(`Actions for ${distributor.name} ${ITEM.name}`)
 await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-menu-item]')].find((el) => /return/i.test(el.textContent)).click())
 await page.waitForSelector('#move-quantity')
 await sleep(500)
@@ -257,7 +261,9 @@ await page.waitForFunction(() => !document.querySelector('#move-quantity'), { ti
 has('a toast confirms the return', await waitForToast(page), 'Return recorded')
 await sleep(900)
 
-const backHeld = (await api('/stocks/distributors')).data.rows.find((row) => row.batchNo === BATCH)
+const backHeld = (await api('/stocks/distributors')).data.rows.find(
+  (row) => row.distributorId === distributor.id && row.itemName === ITEM.name,
+)
 eq('they are left holding 25', backHeld?.held, 25)
 eq('the factory has 475 again', (await api('/stocks/batches')).data.batches.find((b) => b.batchNo === BATCH)?.available, 475)
 
@@ -448,14 +454,91 @@ await cleanup()
 const left = await api('/stocks/batches')
 ok('the suite leaves nothing behind', !(left.data?.batches ?? []).some((b) => b.batchNo.startsWith('E2E-B')))
 
+/* ── the traffic light ───────────────────────────────────────────────── */
+
+// "अच्छा मूविंग प्रोडक्ट ग्रीन होगा, कम मूविंग वाला ऑरेंज, आउट ऑफ स्टॉक रेड"
+has('the colours are explained in plain words', await pageText(page), 'Selling well')
+has('…saying how long counts as not selling', await pageText(page), 'Not sold for')
+has('…and what running low means, with the number', await pageText(page), 'Running low')
+
+const lit = await page.$$eval('tbody tr', (trs) =>
+  trs.map((tr) => ({
+    item: tr.querySelectorAll('td')[1]?.innerText.split('\n')[0] ?? '',
+    dot: tr.querySelector('span[aria-label]')?.getAttribute('aria-label') ?? '',
+    lowBadge: Boolean(tr.querySelector('td:nth-last-child(2) .bg-danger-soft')),
+    expiredRow: tr.className.includes('bg-danger-soft'),
+  })),
+)
+ok('every row carries a movement colour', lit.every((r) => r.dot), JSON.stringify(lit.slice(0, 3)))
+ok('some stock is selling', lit.some((r) => /selling well/i.test(r.dot)), JSON.stringify(lit.map((r) => r.dot)))
+
+// A holding at or under the threshold marks only its closing figure.
+const low = (await api('/stocks/distributors?from=2026-04-01&to=2027-03-31')).data.rows.find((r) => r.stockState === 'LOW' || r.stockState === 'OUT')
+if (low) {
+  const row = lit.find((r) => r.item === low.itemName)
+  ok('stock running out marks its closing figure', row?.lowBadge, JSON.stringify(row))
+  ok('…and does not redden the whole row', !row?.expiredRow, JSON.stringify(row))
+}
+
+// Expired stock is the loudest thing on the screen: the whole row. An issued
+// batch can never be deleted, so rather than leaving one behind every run this
+// borrows a batch they already hold, expires it, looks, and puts it back.
+const heldNow = (await api('/stocks/distributors?from=2026-04-01&to=2027-03-31')).data.rows
+const borrowed = heldNow.find((row) => row.batches.length)?.batches[0]
+const originalExpiry = borrowed?.expiryDate || ''
+if (borrowed) {
+  await api(`/stocks/batches/${borrowed.batchId}`, { method: 'PATCH', body: JSON.stringify({ expiryDate: '2026-01-31' }) })
+  await goto(page, '/admin/stocks/distributor', { heading: 'Distributor Stocks' })
+  await sleep(1800)
+  const withExpired = await page.$$eval('tbody tr', (trs) => trs.map((tr) => tr.className.includes('bg-danger-soft')))
+  ok('expired stock reddens the whole row', withExpired.some(Boolean), JSON.stringify(withExpired.slice(0, 6)))
+
+  await api(`/stocks/batches/${borrowed.batchId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ expiryDate: originalExpiry || null }),
+  })
+}
+
 /* ── Distributor Stocks carries no Opening ───────────────────────────── */
 
 // "ओपनिंग तो यहाँ पर रिमूव होगा, ओपनिंग का तो काम नहीं है" — a distributor's
 // holding is what was issued less what came back, nothing more.
 const holdingHeads = await page.$$eval('thead th', (ths) => ths.map((t) => t.innerText.trim().toLowerCase()))
-ok('Distributor Stocks has no Opening column', !holdingHeads.includes('opening'), JSON.stringify(holdingHeads))
-ok('…but still shows Issued, Returned and Closing', ['issued', 'returned', 'closing'].every((h) => holdingHeads.includes(h)), JSON.stringify(holdingHeads))
+// The holding is item-wise: "बैच को रिमूव करना है… नेम वाइज में टोटल". Once a
+// distributor sells, nobody tells us which batch left their shelf.
+ok('Distributor Stocks carries no Batch column', !holdingHeads.some((h) => h.includes('batch')), JSON.stringify(holdingHeads))
+ok('…and shows Issued, Returned and Closing', ['issued', 'returned', 'closing'].every((h) => holdingHeads.includes(h)), JSON.stringify(holdingHeads))
 ok('what they hold is called Closing, not Held', !holdingHeads.includes('held'), JSON.stringify(holdingHeads))
+
+// Opening is back, but as the admin's own figure — "हम खुद से डाल के".
+ok('Opening is back on Distributor Stocks', holdingHeads.includes('opening'), JSON.stringify(holdingHeads))
+ok('…and it is a control the admin can open', Boolean(await page.$('button[title="Set what they already held"]')))
+
+const firstHolding = (await api('/stocks/distributors?from=2026-04-01&to=2027-03-31')).data.rows[0]
+const factoryBefore = (await api('/stocks/batches?limit=300')).data.batches.filter((b) => b.itemId === firstHolding.itemId).map((b) => `${b.batchNo}:${b.available}`).join(' ')
+
+await page.$$eval('tbody tr td', (tds) => tds.map((td) => td.querySelector('button[title="Set what they already held"]')).find(Boolean).click())
+await sleep(800)
+has('the opening explains what it is', await pageText(page), 'already held before this system')
+await page.click('#opening-quantity', { clickCount: 3 })
+await page.keyboard.press('Backspace')
+await page.type('#opening-quantity', String(firstHolding.opening + 25))
+await clickText(page, 'button', 'Save opening')
+await sleep(1800)
+
+const withOpening = (await api('/stocks/distributors?from=2026-04-01&to=2027-03-31')).data.rows.find((r) => r.id === firstHolding.id)
+eq('the opening the admin typed is kept', withOpening.opening, firstHolding.opening + 25)
+eq('and closing carries it', withOpening.held, firstHolding.held + 25)
+
+// It is stock they had before us, so it can never move a factory figure.
+const factoryAfter = (await api('/stocks/batches?limit=300')).data.batches.filter((b) => b.itemId === firstHolding.itemId).map((b) => `${b.batchNo}:${b.available}`).join(' ')
+eq('a typed opening moves no factory stock', factoryAfter, factoryBefore)
+
+// Put it back as it was.
+await api('/stocks/distributors/opening', {
+  method: 'PUT',
+  body: JSON.stringify({ distributorId: firstHolding.distributorId, itemId: firstHolding.itemId, quantity: firstHolding.opening }),
+})
 
 // "इसमें ये डिस्ट्रीब्यूटर का इनवॉइस नंबर भी आएगा… डेट वाइज, इनवाइस की डेट,
 // इनवाइस का नंबर." The bill the stock came on, and the date it came.
@@ -471,6 +554,74 @@ ok('the bill list carries dates and amounts', /date\s+invoice\s+issued\s+returne
 await page.keyboard.press('Escape')
 await sleep(500)
 
+/* ── the factory shouts before it runs out ───────────────────────────── */
+
+// "फैक्ट्री के सौ कर दो" — the closing figure reddens at the threshold, and
+// only on the item line. Nothing is that low today, so the bar is raised to
+// prove it and put straight back.
+const stockWas = (await api('/settings')).data.settings.stock
+// Whatever the data happens to hold, the badge must agree with the threshold.
+const readClosings = () =>
+  page.$$eval('tbody tr', (trs) =>
+    trs
+      .map((tr) => {
+        const tds = tr.querySelectorAll('td')
+        const cell = tds[tds.length - 2]
+        return { closing: Number((cell?.innerText ?? '').replace(/[^\d]/g, '')), low: Boolean(cell?.querySelector('.bg-danger-soft')) }
+      })
+      .filter((r) => r.closing),
+  )
+
+// Read the factory, not whichever screen the suite happened to leave open:
+// the two have different thresholds and would disagree by design.
+await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
+await sleep(1600)
+const atUsual = await readClosings()
+ok(
+  `on the factory, every red figure is at or under ${stockWas.lowFactory}`,
+  atUsual.every((r) => r.low === r.closing <= stockWas.lowFactory),
+  JSON.stringify(atUsual.slice(0, 8)),
+)
+
+await api('/settings/stock', { method: 'PATCH', body: JSON.stringify({ lowFactory: 300 }) })
+await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
+await sleep(1800)
+const raised = await readClosings()
+ok('raising the bar reddens what is under it', raised.some((r) => r.low), JSON.stringify(raised.slice(0, 5)))
+ok('…and only what is under it', raised.every((r) => r.low === r.closing <= 300), JSON.stringify(raised.slice(0, 8)))
+
+await api('/settings/stock', { method: 'PATCH', body: JSON.stringify(stockWas) })
+
+/* ── the product photo opens larger ──────────────────────────────────── */
+
+await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
+await sleep(1600)
+const photoButton = await page.$('button[title^="See "]')
+ok('the product photo is clickable', Boolean(photoButton))
+await photoButton.click()
+await sleep(900)
+
+// It takes the whole screen, and the admin can zoom into it.
+const viewer = await page.$eval('[role=dialog]', (el) => ({ w: el.clientWidth, h: el.clientHeight }))
+const screen = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+ok('the photo fills the screen', viewer.w === screen.w && viewer.h === screen.h, `${viewer.w}×${viewer.h} vs ${screen.w}×${screen.h}`)
+
+const scaleOf = () => page.$eval('[role=dialog] img', (el) => el.style.transform)
+has('it opens fitted', await scaleOf(), 'scale(1)')
+await page.click('button[aria-label="Zoom in"]')
+await page.click('button[aria-label="Zoom in"]')
+await sleep(400)
+has('zooming in makes it bigger', await scaleOf(), 'scale(1.5)')
+has('…and the level is shown', await page.$eval('button[aria-label="Fit to screen"]', (el) => el.innerText), '150%')
+
+await page.keyboard.press('0')
+await sleep(300)
+has('pressing 0 fits it back', await scaleOf(), 'scale(1)')
+
+await page.keyboard.press('Escape')
+await sleep(500)
+ok('and Escape closes it', (await page.$('[role=dialog]')) === null)
+
 /* ── the columns the client asked for ────────────────────────────────── */
 
 // The suite ends on Distributor Stocks; these are about the factory screen.
@@ -482,9 +633,9 @@ ok('Factory Stocks still opens the year with an Opening column', factoryHeads.in
 ok('Factory Stocks has a Return column', factoryHeads.includes('return'), JSON.stringify(factoryHeads))
 ok('…sitting between Out and Closing', factoryHeads.indexOf('return') === factoryHeads.indexOf('out') + 1 && factoryHeads.indexOf('closing') === factoryHeads.indexOf('return') + 1)
 
-// "अब यहाँ पे ऊपर टोटल लिखेंगे आपको" — the column totals above the table.
-const totalsStrip = await pageText(page)
-ok('a totals strip sits above the table', /total · \d+ items?/i.test(totalsStrip), totalsStrip.slice(0, 120))
+// No overall totals row: "अलग अलग आइटम का टोटल… उसका तो मतलब नहीं होगा".
+// Adding different products together says nothing, so each item totals itself.
+ok('no overall totals row above the table', !/total · \d+ items?/i.test(await pageText(page)))
 
 // Issuing stock must never land in Return: that column is only what came back.
 // Out carries it, Closing drops by it, Return does not move.

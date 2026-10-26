@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
+import { PhotoViewer } from '@/components/common/PhotoViewer'
 import { ImageUploader } from '@/components/form/ImageUploader'
 import { SelectField } from '@/components/form/SelectField'
 import { TextField } from '@/components/form/TextField'
@@ -30,6 +31,8 @@ const Unit = ({ children }) => (
  */
 export function SchemeFields({ form, errors, items, gifts = [], onChange, onAddGift }) {
   const [adding, setAdding] = useState(false)
+  // The free item's photo, opened full screen.
+  const [gift, setGift] = useState(null)
   const digits = (value) => value.replace(/\D/g, '').slice(0, 5)
 
   /** `item:<id>` or `gift:<id>` — one field, so only one can ever be chosen. */
@@ -124,14 +127,23 @@ export function SchemeFields({ form, errors, items, gifts = [], onChange, onAddG
 
       <div className="mt-2 flex items-center gap-2.5">
         {free?.imageUrl && (
-          <img
-            src={free.imageUrl}
-            alt=""
-            className="size-10 shrink-0 rounded-lg border border-mint-pale object-cover"
-          />
+          <button
+            type="button"
+            onClick={() => setGift({ src: free.imageUrl, name: free.name ?? 'Free item' })}
+            title={`See ${free.name ?? 'the free item'} larger`}
+            className="shrink-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+          >
+            <img
+              src={free.imageUrl}
+              alt={free.name ?? ''}
+              className="size-10 rounded-lg border border-mint-pale object-cover transition-transform hover:scale-110"
+            />
+          </button>
         )}
         <p className="text-xs text-ink-muted">{sentence}</p>
       </div>
+
+      <PhotoViewer open={Boolean(gift)} src={gift?.src} title={gift?.name ?? ''} onClose={() => setGift(null)} />
     </div>
   )
 }

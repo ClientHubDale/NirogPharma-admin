@@ -17,6 +17,24 @@ export const BILL_COMPANY = {
   goodsHeading: 'AYURVEDIC MEDICINE',
 }
 
+/**
+ * The three copies a bill is printed in — "ऑरिजनल फॉर बायर, डुप्लीकेट फॉर
+ * ट्रांसपोर्टर एंड ट्रिप्लिकेट फॉर ऑफिस". Each page says which one it is.
+ */
+export const BILL_COPIES = [
+  { value: 'all', label: 'All three copies' },
+  { value: 'original', label: 'Original for buyer' },
+  { value: 'duplicate', label: 'Duplicate for transporter' },
+  { value: 'triplicate', label: 'Triplicate for office' },
+]
+
+/** What each copy prints across the top. */
+export const COPY_LABEL = {
+  original: 'ORIGINAL FOR BUYER',
+  duplicate: 'DUPLICATE FOR TRANSPORTER',
+  triplicate: 'TRIPLICATE FOR OFFICE',
+}
+
 /** The five conditions printed under every bill, in the client's own words. */
 export const BILL_TERMS = [
   'GOODS ONCE SOLD WILL NOT BE TAKEN BACK.',
@@ -54,7 +72,25 @@ const STATE_CODES = {
   TRIPURA: '16', 'UTTAR PRADESH': '09', UTTARAKHAND: '05', 'WEST BENGAL': '19',
 }
 
-const FULL_NAME = { UP: 'UTTAR PRADESH', UK: 'UTTARAKHAND', MP: 'MADHYA PRADESH', HP: 'HIMACHAL PRADESH', WB: 'WEST BENGAL', TN: 'TAMIL NADU', AP: 'ANDHRA PRADESH', JK: 'JAMMU AND KASHMIR' }
+/**
+ * Distributors are stored with the short code the admin typed, so the bill has
+ * to expand it: "PLACE OF SUPPLY : HARYANA (06)", never a bare "HR". Every
+ * state and union territory is here — a missing one would print the code and
+ * quietly make an inter-state bill look wrong.
+ */
+const FULL_NAME = {
+  AN: 'ANDAMAN AND NICOBAR ISLANDS', AP: 'ANDHRA PRADESH', AR: 'ARUNACHAL PRADESH', AS: 'ASSAM',
+  BR: 'BIHAR', CG: 'CHHATTISGARH', CH: 'CHANDIGARH', CT: 'CHHATTISGARH',
+  DD: 'DADRA AND NAGAR HAVELI AND DAMAN AND DIU', DL: 'DELHI', DN: 'DADRA AND NAGAR HAVELI AND DAMAN AND DIU',
+  GA: 'GOA', GJ: 'GUJARAT', HP: 'HIMACHAL PRADESH', HR: 'HARYANA',
+  JH: 'JHARKHAND', JK: 'JAMMU AND KASHMIR', KA: 'KARNATAKA', KL: 'KERALA',
+  LA: 'LADAKH', LD: 'LAKSHADWEEP', MH: 'MAHARASHTRA', ML: 'MEGHALAYA',
+  MN: 'MANIPUR', MP: 'MADHYA PRADESH', MZ: 'MIZORAM', NL: 'NAGALAND',
+  OD: 'ODISHA', OR: 'ODISHA', PB: 'PUNJAB', PY: 'PUDUCHERRY',
+  RJ: 'RAJASTHAN', SK: 'SIKKIM', TG: 'TELANGANA', TN: 'TAMIL NADU',
+  TR: 'TRIPURA', TS: 'TELANGANA', UK: 'UTTARAKHAND', UP: 'UTTAR PRADESH',
+  UT: 'UTTARAKHAND', WB: 'WEST BENGAL',
+}
 
 export function placeOfSupply(state) {
   if (!state) return ''

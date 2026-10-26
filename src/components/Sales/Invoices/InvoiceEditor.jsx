@@ -3,6 +3,8 @@ import { ArrowLeft, Loader2, Pencil, Printer, Send } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Modal } from "@/components/common/Modal";
+import { FormDrawer } from "@/components/data/FormDrawer";
+import { BillTemplate } from "@/components/Settings/components/BillTemplate";
 import { useToast } from "@/components/common/Toast";
 import { cn } from "@/lib/utils";
 import { SearchSelect } from "@/components/form/SearchSelect";
@@ -18,11 +20,14 @@ import { issueInvoice, saveInvoice } from "@/store/invoicesSlice";
 import {
   fetchSettings,
   selectBank,
+  saveSettingsGroup,
+  selectCompanySettings,
   selectInvoiceSettings,
 } from "@/store/settingsSlice";
 import { fetchBatches, selectBatches } from "@/store/stockSlice";
 import { usePriceTiers } from "@/hooks/usePriceTiers";
 import { InvoiceLines } from "./components/InvoiceLines";
+import { BILL_COPIES } from "./components/InvoicePrint/billFormat";
 import { InvoicePrint } from "./components/InvoicePrint";
 import {
   emptyInvoiceForm,
@@ -69,6 +74,45 @@ export default function InvoiceEditor() {
   const tiers = usePriceTiers();
   // The bank the money goes to and what a bill must carry, both the admin's.
   const bank = useSelector(selectBank);
+  const companySettings = useSelector(selectCompanySettings);
+
+  /**
+   * The letterhead, edited without leaving a half-typed bill behind. The
+   * client wanted it reachable from here — "चेंज टेम्पलेट करके… टेम्प्लेट में
+   * क्लिक करोगे तो पूरा टेम्पलेट खुल जाएगा" — and the sheet behind the drawer
+   * redraws the moment it is saved.
+   */
+  // Which copy the PDF should carry. All three unless one is picked.
+  const [copyChoice, setCopyChoice] = useState("all");
+
+  const [template, setTemplate] = useState(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  const openTemplate = () =>
+    setTemplate({ company: { ...companySettings }, bank: { ...bank } });
+
+  const saveTemplate = async () => {
+    setSavingTemplate(true);
+    const [co, bk] = await Promise.all([
+      dispatch(
+        saveSettingsGroup({ group: "company", patch: template.company }),
+      ),
+      dispatch(saveSettingsGroup({ group: "bank", patch: template.bank })),
+    ]);
+    setSavingTemplate(false);
+    if (
+      saveSettingsGroup.rejected.match(co) ||
+      saveSettingsGroup.rejected.match(bk)
+    ) {
+      return toast({ tone: "danger", title: "Could not save the template" });
+    }
+    setTemplate(null);
+    toast({
+      tone: "success",
+      title: "Template saved",
+      description: "Every bill prints with it from now on.",
+    });
+  };
   const rules = useSelector(selectInvoiceSettings);
 
   const [form, setForm] = useState(emptyInvoiceForm);
@@ -124,11 +168,50 @@ export default function InvoiceEditor() {
     JSON.stringify(formToPayload(form)) !==
       JSON.stringify(formToPayload(invoiceToForm(saved)));
 
+  /**
+   * Whether there is anything to lose. A bill that has been typed into is
+   * worth warning about; an untouched Create screen is not — warning there
+   * would stop the admin leaving a form they never started.
+   */
+  const hasTyped =
+    JSON.stringify(formToPayload(form)) !==
+    JSON.stringify(formToPayload(emptyInvoiceForm()));
+  const worthKeeping = saved ? isDirty : hasTyped;
+
   const batchNosOf = (line) =>
     (line.batches ?? [])
       .map((row) => batches.find((b) => b.id === row.batchId)?.batchNo)
       .filter(Boolean)
       .join(", ");
+
+  // "डू यू वांट टू रिफ्रेश? देन यू लूज़" — a half-typed bill is easy to lose to
+  // a stray reload, so the browser asks first. Only while something is unsaved.
+  useEffect(() => {
+    if (!worthKeeping || issued) return;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [worthKeeping, issued]);
+
+  /** Which copy the PDF carries — shown under the GSTIN, where it prints. */
+  const copyPicker = (
+    <select
+      id="invoice-copy"
+      aria-label="Which copy to print"
+      value={copyChoice}
+      onChange={(e) => setCopyChoice(e.target.value)}
+      className="mt-0.5 rounded-[2px] border border-black/40 bg-white px-1 py-px text-[9px] outline-none focus:border-green-deep print:hidden"
+    >
+      {BILL_COPIES.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
 
   /** Only batches of that item, and only ones with something in them. */
   const batchesFor = (itemId) =>
@@ -161,6 +244,8 @@ export default function InvoiceEditor() {
   const asBill = {
     ...form,
     priceTier: firm?.priceTier ?? "",
+    shipTo: form.shipTo,
+    proforma: form.proforma,
     interState,
     distributor: firm ?? {},
     dueDate: saved?.dueDate ?? "",
@@ -311,7 +396,22 @@ export default function InvoiceEditor() {
           {/* Prints the sheet below and nothing else — the browser's own Save
               as PDF. It works on a bill that has not been saved yet, because
               what is on screen already is the bill. */}
-          <Button type="button" variant="outline" size="lg" onClick={() => window.print()}>
+          {/* A saved bill prints through the standalone sheet, which can lay
+              out all three copies. An unsaved one prints what is on screen. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() =>
+              saved
+                ? window.open(
+                    `/admin/sales/invoices/${saved.id}/print?print=1&copy=${copyChoice}`,
+                    "_blank",
+                    "noopener",
+                  )
+                : window.print()
+            }
+          >
             <Printer data-icon="inline-start" /> PDF
           </Button>
           <Button
@@ -321,6 +421,14 @@ export default function InvoiceEditor() {
             onClick={() => navigate("/admin/sales/invoices")}
           >
             Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={openTemplate}
+          >
+            <Pencil data-icon="inline-start" /> Edit template
           </Button>
           {saved && (
             <>
@@ -363,15 +471,38 @@ export default function InvoiceEditor() {
       </div>
 
       {reviewing && saved ? (
-        <div id="bill-sheet" className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6">
-          <InvoicePrint invoice={saved} bank={bank} />
+        <div
+          id="bill-sheet"
+          className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6"
+        >
+          <InvoicePrint
+            invoice={saved}
+            bank={bank}
+            company={companySettings}
+            taxRate={rules.defaultGstRate}
+            show={{
+              vehicleNo: rules.showVehicleNo !== false,
+              ewayBillNo: rules.showEwayBill !== false,
+            }}
+            slots={{ copyChoice: copyPicker }}
+          />
         </div>
       ) : (
-        <div id="bill-sheet" className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6">
+        <div
+          id="bill-sheet"
+          className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6"
+        >
           <InvoicePrint
             invoice={asBill}
             bank={bank}
+            company={companySettings}
+            taxRate={rules.defaultGstRate}
+            show={{
+              vehicleNo: rules.showVehicleNo !== false,
+              ewayBillNo: rules.showEwayBill !== false,
+            }}
             slots={{
+              copyChoice: copyPicker,
               invoiceNo: (
                 <input
                   id="invoice-no"
@@ -399,6 +530,7 @@ export default function InvoiceEditor() {
               ),
               extraMeta: (
                 <div className="space-y-[1px] print:hidden">
+                  {rules.showCreditPeriod !== false && (
                   <div className="grid grid-cols-[7.5rem_0.5rem_1fr] gap-x-1">
                     <span>CREDIT PERIOD</span>
                     <span>:</span>
@@ -420,6 +552,7 @@ export default function InvoiceEditor() {
                       days
                     </span>
                   </div>
+                  )}
                   <div className="grid grid-cols-[7.5rem_0.5rem_1fr] gap-x-1">
                     <span>TOTAL NAG</span>
                     <span>:</span>
@@ -429,7 +562,9 @@ export default function InvoiceEditor() {
                       inputMode="numeric"
                       placeholder="7"
                       value={form.packages}
-                      onChange={(e) => update("packages", e.target.value.replace(/\D/g, ""))}
+                      onChange={(e) =>
+                        update("packages", e.target.value.replace(/\D/g, ""))
+                      }
                       disabled={issued}
                       className={cn(FIELD, "w-14")}
                     />
@@ -457,7 +592,11 @@ export default function InvoiceEditor() {
               billTo: (
                 <div className="space-y-1.5">
                   {/* The picker is for the screen; paper gets the name. */}
-                  {firm && <p className="hidden font-bold print:block">M/S {firm.name}</p>}
+                  {firm && (
+                    <p className="hidden font-bold print:block">
+                      M/S {firm.name}
+                    </p>
+                  )}
                   <SearchSelect
                     id="invoice-distributor"
                     aria-label="Distributor"
@@ -493,6 +632,71 @@ export default function InvoiceEditor() {
                           : "No GSTIN (unregistered)"}
                       </p>
                     </div>
+                  )}
+                </div>
+              ),
+              // "+ New" belongs only here: the bill is always to a distributor
+              // we know, but the goods may go to a godown we do not.
+              shipTo: (
+                <div className="space-y-1.5">
+                  {form.shipTo ? (
+                    <>
+                      <textarea
+                        id="invoice-ship-to"
+                        aria-label="Ship to address"
+                        rows={4}
+                        value={form.shipTo}
+                        onChange={(e) => update("shipTo", e.target.value)}
+                        disabled={issued}
+                        placeholder={"M/S ...\nStreet, area\nCity, State, PIN"}
+                        className={cn(FIELD, "resize-y")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => update("shipTo", "")}
+                        disabled={issued}
+                        className="text-[9px] font-semibold text-green-deep underline print:hidden"
+                      >
+                        Same as billing
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {firm ? (
+                        <div className="text-[9px] leading-snug">
+                          <p className="font-bold">M/S {firm.name}</p>
+                          {firm.address && (
+                            <p className="whitespace-pre-line">
+                              {firm.address}
+                            </p>
+                          )}
+                          <p>
+                            {[firm.state, firm.pincode]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-[9px] text-ink-muted">
+                          Same as billing
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          update(
+                            "shipTo",
+                            firm
+                              ? `M/S ${firm.name}\n${firm.address ?? ""}`
+                              : "",
+                          )
+                        }
+                        disabled={issued}
+                        className="inline-flex items-center gap-1 text-[9px] font-semibold text-green-deep underline print:hidden"
+                      >
+                        + New address
+                      </button>
+                    </>
                   )}
                 </div>
               ),
@@ -547,7 +751,9 @@ export default function InvoiceEditor() {
                   aria-label="Station"
                   placeholder="RAMPUR"
                   value={form.station}
-                  onChange={(e) => update("station", e.target.value.toUpperCase())}
+                  onChange={(e) =>
+                    update("station", e.target.value.toUpperCase())
+                  }
                   disabled={issued}
                   className={FIELD}
                 />
@@ -563,6 +769,7 @@ export default function InvoiceEditor() {
                   tiers={tiers}
                   disabled={issued}
                   interState={interState}
+                  taxRate={rules.defaultGstRate}
                 />
               ),
             }}
@@ -574,6 +781,32 @@ export default function InvoiceEditor() {
           )}
         </div>
       )}
+
+      <FormDrawer
+        open={Boolean(template)}
+        onOpenChange={(open) => !open && setTemplate(null)}
+        title="Edit bill template"
+        description="What every printed bill says. The layout stays the same; these are the words on it."
+        onSubmit={saveTemplate}
+        saving={savingTemplate}
+        saveLabel="Save template"
+      >
+        {template && (
+          <BillTemplate
+            company={template.company}
+            bank={template.bank}
+            onChange={(key, value) =>
+              setTemplate((t) => ({
+                ...t,
+                company: { ...t.company, [key]: value },
+              }))
+            }
+            onChangeBank={(key, value) =>
+              setTemplate((t) => ({ ...t, bank: { ...t.bank, [key]: value } }))
+            }
+          />
+        )}
+      </FormDrawer>
 
       <Modal
         open={confirming}

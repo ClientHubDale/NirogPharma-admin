@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { StatusPill } from '@/components/data/StatusPill'
+import { PhotoViewer } from '@/components/common/PhotoViewer'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { Switch } from '@/components/form/Switch'
@@ -149,6 +150,9 @@ export default function Users() {
     })
   }
 
+  // A staff photo, opened full screen — the same gesture as a product photo.
+  const [photo, setPhoto] = useState(null)
+
   const columns = useMemo(
     () =>
       helper.columns([
@@ -157,7 +161,12 @@ export default function Users() {
           header: 'User Name',
           cell: ({ row, getValue }) => (
             <div className="flex items-center gap-2.5">
-              <UserAvatar name={getValue()} photo={row.original.photo?.[0]?.url} className="size-8 bg-mint-pale text-[0.7rem] text-forest" />
+              <UserAvatar
+                name={getValue()}
+                photo={row.original.photo?.[0]?.url}
+                onOpen={() => setPhoto({ src: row.original.photo?.[0]?.url, name: getValue(), mobile: row.original.mobile })}
+                className="size-8 bg-mint-pale text-[0.7rem] text-forest"
+              />
               <Link to={`/admin/attendance/${row.original.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-green-deep uppercase hover:underline">
                 {getValue()}
               </Link>
@@ -366,6 +375,14 @@ export default function Users() {
         />
         )}
       </section>
+
+      <PhotoViewer
+        open={Boolean(photo)}
+        src={photo?.src}
+        title={photo?.name ?? ''}
+        subtitle={photo?.mobile}
+        onClose={() => setPhoto(null)}
+      />
 
       <FormDrawer
         open={Boolean(drawer)}

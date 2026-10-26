@@ -278,4 +278,46 @@ const left = await api('/users?limit=100')
 ok('the suite leaves no accounts behind', !(left?.data?.users ?? []).some((u) => [MANAGER.mobile, EXEC.mobile].includes(u.mobile)))
 
 // The duplicate-mobile attempt makes Chrome log the 409 it got back.
+/* ── a staff photo opens full screen ─────────────────────────────────── */
+
+const avatar = await page.$('button[title^="See "]')
+ok('a staff photo can be opened', Boolean(avatar))
+if (avatar) {
+  await avatar.click()
+  await sleep(800)
+  const viewer = await page.$eval('[role=dialog]', (el) => ({ w: el.clientWidth, h: el.clientHeight }))
+  const screen = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+  ok('and it fills the screen', viewer.w === screen.w && viewer.h === screen.h, `${viewer.w}×${viewer.h} vs ${screen.w}×${screen.h}`)
+  await page.click('button[aria-label="Zoom in"]')
+  await sleep(300)
+  has('…and zooms', await page.$eval('[role=dialog] img', (el) => el.style.transform), 'scale(1.25)')
+  await page.keyboard.press('Escape')
+  await sleep(400)
+  ok('…and closes again', (await page.$('[role=dialog]')) === null)
+}
+
+/* ── miscellaneous, beside the stay allowance ────────────────────────── */
+
+// "किसी को फिंगरप्रिंट निकलवाए हैं, कुछ कुरियर किया" — the small outlays a
+// month throws up that no other allowance names.
+await goto(page, '/admin/users', { heading: 'Users' })
+await sleep(1500)
+await page.$$eval('tbody tr button', (els) => els.find((b) => b.querySelector('svg'))?.click())
+await sleep(1200)
+ok('a miscellaneous allowance can be set', Boolean(await page.$('#usr-misc')))
+ok('…beside the stay allowance', Boolean(await page.$('#usr-stay')))
+
+await page.click('#usr-misc', { clickCount: 3 })
+await page.keyboard.press('Backspace')
+await page.type('#usr-misc', '750')
+await clickText(page, 'header button, footer button', 'Save changes')
+await sleep(2200)
+const withMisc = (await api('/users?limit=100')).data.users.find((u) => Number(u.miscAllowance) === 750)
+ok('and it reaches the server', Boolean(withMisc), withMisc ? `${withMisc.name} → ${withMisc.miscAllowance}` : 'not saved')
+
+// Put it back, so a run leaves the staff as it found them.
+if (withMisc) {
+  await api(`/users/${withMisc.id}`, { method: 'PATCH', body: JSON.stringify({ miscAllowance: 0 }) })
+}
+
 await finish(browser, errors, { ignore: /status of 409/ })

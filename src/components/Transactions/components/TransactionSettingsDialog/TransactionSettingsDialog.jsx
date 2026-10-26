@@ -15,6 +15,13 @@ const TOGGLES = [
   { key: 'terms', label: 'Terms and conditions', hint: 'Print terms at the bottom' },
 ]
 
+/** Sales Invoices carry only what the bill actually has a place for. */
+export const INVOICE_TOGGLES = [
+  { key: 'showVehicleNo', label: 'Vehicle No.', hint: 'Show it on the bill and on the printed copy' },
+  { key: 'showEwayBill', label: 'E-way Bill No.', hint: 'Show it on the bill and on the printed copy' },
+  { key: 'showCreditPeriod', label: 'Credit Period', hint: 'Credit days, taken from the distributor' },
+]
+
 function CustomFields({ title, sign, values, onChange }) {
   const [adding, setAdding] = useState('')
   return (
@@ -67,7 +74,12 @@ function CustomFields({ title, sign, values, onChange }) {
 }
 
 /** ⚙ Transaction Settings — which optional fields a document type shows, plus bill-level rules. */
-export function TransactionSettingsDialog({ open, onOpenChange, settings, onSave, noun }) {
+/**
+ * `toggles` lets a screen say which switches it actually honours, and `extras`
+ * turns off the minimum-order and custom-field blocks. Sales Invoices pass
+ * their own four: a switch that changes nothing is worse than no switch.
+ */
+export function TransactionSettingsDialog({ open, onOpenChange, settings, onSave, noun, toggles = TOGGLES, extras = true }) {
   const [draft, setDraft] = useState(settings)
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
 
@@ -98,7 +110,7 @@ export function TransactionSettingsDialog({ open, onOpenChange, settings, onSave
       }
     >
       <ul className="divide-y divide-mint-pale">
-        {TOGGLES.map((t) => (
+        {toggles.map((t) => (
           <li key={t.key} className="flex items-center justify-between gap-4 py-3">
             <div>
               <p className="text-sm font-semibold text-black">{t.label}</p>
@@ -108,9 +120,10 @@ export function TransactionSettingsDialog({ open, onOpenChange, settings, onSave
           </li>
         ))}
       </ul>
-      {draft.terms && (
+      {extras && draft.terms && (
         <TextAreaField id="setting-terms" label="Terms text" rows={2} value={draft.termsText} onChange={(e) => set('termsText', e.target.value)} className="mt-2" />
       )}
+      {extras && (
       <div className="mt-4 grid gap-2 border-t border-mint-pale py-4 sm:grid-cols-[10rem_1fr] sm:items-center">
         <p className="text-sm font-semibold text-ink">Min. Order Value:</p>
         <TextField
@@ -124,8 +137,9 @@ export function TransactionSettingsDialog({ open, onOpenChange, settings, onSave
           className="sm:max-w-56"
         />
       </div>
-      <CustomFields title="Discounts" sign="−" values={draft.discountFields} onChange={(v) => set('discountFields', v)} />
-      <CustomFields title="Charges" sign="+" values={draft.chargeFields} onChange={(v) => set('chargeFields', v)} />
+      )}
+      {extras && <CustomFields title="Discounts" sign="−" values={draft.discountFields} onChange={(v) => set('discountFields', v)} />}
+      {extras && <CustomFields title="Charges" sign="+" values={draft.chargeFields} onChange={(v) => set('chargeFields', v)} />}
     </Modal>
   )
 }

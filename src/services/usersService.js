@@ -18,6 +18,7 @@ const FIELDS = [
   'taPerKm',
   'daPerDay',
   'stayPerNight',
+  'miscAllowance',
   'incentivePercent',
 ]
 const LIST_FIELDS = ['regionIds', 'cityIds', 'routeIds', 'distributorIds']

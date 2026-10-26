@@ -10,6 +10,7 @@ const resolve = (updater, current) => (typeof updater === 'function' ? updater(c
  * are controlled by the page so the toolbar and column settings can drive them.
  *
  * Column meta: { align: 'right' | 'center', className, headerClassName }
+ * `rowClassName(row)` colours a whole row — expired stock turns the row red.
  */
 export function DataTable({
   data,
@@ -21,6 +22,8 @@ export function DataTable({
   onRowClick,
   getRowId,
   highlightRowId,
+  /** Lets a screen colour a whole row from its own data, e.g. expired stock. */
+  rowClassName,
   empty,
 }) {
   const table = useTable({
@@ -90,6 +93,7 @@ export function DataTable({
                 'transition-colors',
                 onRowClick && 'cursor-pointer hover:bg-bg',
                 row.id === highlightRowId && 'bg-mint-pale/60',
+                rowClassName?.(row.original),
               )}
             >
               {row.getVisibleCells().map((cell) => {

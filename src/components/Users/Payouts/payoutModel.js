@@ -29,6 +29,7 @@ export const PAYOUT_LINES = [
   { key: 'ta', label: 'Travel allowance (TA)' },
   { key: 'da', label: 'Daily allowance (DA)' },
   { key: 'stay', label: 'Stay / hotel allowance' },
+  { key: 'misc', label: 'Miscellaneous' },
   { key: 'incentive', label: 'Incentive on sales' },
 ]
 
@@ -80,6 +81,9 @@ export function calculatePayout({ user, month, attendance, office, sales, partie
     // Nights away are entered on the bill — attendance records a day, not a hotel.
     stayNights: Number(stayNights) || 0,
     stay: r2((Number(stayNights) || 0) * (Number(user.stayPerNight) || 0)),
+    // A flat monthly figure — a fingerprint taken, a courier sent. It is not
+    // counted off days or distance, so it stands as it is unless corrected.
+    misc: r2(Number(user.miscAllowance) || 0),
     incentive: r2((soldValue * (Number(user.incentivePercent) || 0)) / 100),
   }
 }
@@ -95,7 +99,7 @@ export function payoutTotals(calculated, payout) {
   const adjustments = payout?.adjustments ?? []
   const bonuses = r2(adjustments.filter((a) => a.kind === 'BONUS').reduce((sum, a) => sum + (Number(a.amount) || 0), 0))
   const deductions = r2(adjustments.filter((a) => a.kind === 'DEDUCTION').reduce((sum, a) => sum + (Number(a.amount) || 0), 0))
-  const earned = r2(lines.salary + lines.ta + lines.da + lines.stay + lines.incentive)
+  const earned = r2(lines.salary + lines.ta + lines.da + lines.stay + lines.misc + lines.incentive)
   return { ...lines, bonuses, deductions, earned, net: Math.max(0, Math.round(earned + bonuses - deductions)) }
 }
 

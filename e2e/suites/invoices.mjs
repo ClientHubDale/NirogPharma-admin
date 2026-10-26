@@ -162,7 +162,36 @@ ok('the editing table is not printed', !/of \d+ picked/.test(paper), paper.slice
 has('…the bill table is', paper, 'DESCRIPTION')
 has('…and it names the buyer', paper, 'M/S')
 ok('editor-only rows stay off the paper', !/CREDIT PERIOD/i.test(paper), paper.slice(0, 200))
+
+// "जी एस टी के नीचे ड्रॉपडाउन बना देना, उसमें तीनों डाल देना" — which copy to
+// print, chosen where it prints, and the sheet lays out what was asked for.
 await page.emulateMediaType('screen')
+ok('the copy to print can be chosen', Boolean(await page.$('#invoice-copy')))
+const copyOptions = await page.$$eval('#invoice-copy option', (els) => els.map((e) => e.value))
+ok('…all three, plus all of them at once', copyOptions.join(',') === 'all,original,duplicate,triplicate', copyOptions.join(','))
+
+for (const [choice, expected] of [
+  ['all', ['ORIGINAL FOR BUYER', 'DUPLICATE FOR TRANSPORTER', 'TRIPLICATE FOR OFFICE']],
+  ['original', ['ORIGINAL FOR BUYER']],
+  ['duplicate', ['DUPLICATE FOR TRANSPORTER']],
+  ['triplicate', ['TRIPLICATE FOR OFFICE']],
+]) {
+  await goto(page, `/admin/sales/invoices/${saved.id}/print?copy=${choice}`)
+  await sleep(1400)
+  const labels = await page.$$eval('[class*="uppercase"]', (els) =>
+    els.map((e) => e.textContent.trim()).filter((x) => /FOR (BUYER|TRANSPORTER|OFFICE)/.test(x)),
+  )
+  ok(`copy=${choice} prints ${expected.length} page(s)`, labels.join('|') === expected.join('|'), labels.join(' · '))
+}
+await page.emulateMediaType('screen')
+
+// Those checks walked off to the print sheet; the next ones are about the
+// form, so come back to it and open it.
+await goto(page, `/admin/sales/invoices/${saved.id}/edit`)
+await sleep(1600)
+await clickText(page, 'button', 'Edit')
+await page.waitForSelector('#invoice-no')
+await sleep(600)
 ok('so the field cannot be typed into', await page.$eval('#invoice-no', (el) => el.disabled))
 
 /* ── the money ────────────────────────────────────────────────────────── */
@@ -249,7 +278,9 @@ await sleep(800)
 has('Settings has a Billing tab', await pageText(page), 'What a bill must carry')
 ok('with a vehicle-number switch', Boolean(await page.$('#billing-vehicle')))
 ok('and an e-way bill switch', Boolean(await page.$('#billing-eway')))
-ok('and the terms printed on every bill', Boolean(await page.$('#billing-terms')))
+// The conditions moved to the bill template, where the rest of the printed
+// words live — two boxes claiming to set them was one too many.
+ok('and what the bill shows', Boolean(await page.$('#billing-show-vehicle')))
 
 // The bank is the admin's to fill, and its name is typed — a fixed list could
 // not say "KOTAK MAHINDRA BANK" when it only carried "Kotak Bank".
