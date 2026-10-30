@@ -278,9 +278,11 @@ await sleep(800)
 has('Settings has a Billing tab', await pageText(page), 'What a bill must carry')
 ok('with a vehicle-number switch', Boolean(await page.$('#billing-vehicle')))
 ok('and an e-way bill switch', Boolean(await page.$('#billing-eway')))
-// The conditions moved to the bill template, where the rest of the printed
-// words live — two boxes claiming to set them was one too many.
-ok('and what the bill shows', Boolean(await page.$('#billing-show-vehicle')))
+// There is no separate "show it on the bill" switch any more: asking for a
+// field is what puts it on the bill, so two boxes claiming to set the same
+// thing were one too many.
+ok('and no second switch saying the same thing', !(await page.$('#billing-show-vehicle')))
+ok('…for the e-way bill either', !(await page.$('#billing-show-eway')))
 
 // The bank is the admin's to fill, and its name is typed — a fixed list could
 // not say "KOTAK MAHINDRA BANK" when it only carried "Kotak Bank".
@@ -292,6 +294,18 @@ ok('…not a fixed list to pick from', await page.$eval('#bank-name', (el) => el
 for (const id of ['#bank-branch', '#bank-ifsc', '#bank-account', '#bank-holder']) {
   ok(`and ${id.slice(1)} can be filled too`, Boolean(await page.$(id)))
 }
+
+// A picture on the bill can be taken off, not only swapped — a reissued QR or
+// an old signature has to be removable. Nothing is saved here, so the real
+// letterhead is left alone.
+await clickText(page, 'nav button', 'Bill template')
+await sleep(1000)
+for (const id of ['#remove-logoUrl', '#remove-signatureUrl', '#remove-barcodeUrl']) {
+  ok(`${id.slice(8)} can be removed`, Boolean(await page.$(id)))
+}
+await page.click('#remove-signatureUrl')
+await sleep(300)
+ok('and the cross clears the picture', !(await page.$('#remove-signatureUrl')))
 
 /* ── a saved bill opens as the bill ──────────────────────────────────── */
 
@@ -315,6 +329,18 @@ has('and it names the bill', sheet, anyBill.invoiceNo)
 // A bill has to say who it is for — the firm comes back flattened onto the
 // invoice, not nested, which once left Bill to blank on every printed sheet.
 has('and says who it is for', sheet, anyBill.distributorName)
+
+// The goods table is ruled down the page like the client's own printed pad:
+// the items, then blanks, always twenty rows between the heading row and the
+// total — so a one-line bill still prints a full sheet.
+const ruled = await page.evaluate(() => {
+  const head = [...document.querySelectorAll('th')].find((th) => th.textContent.includes('BATCH NO.'))
+  const body = head?.closest('table')?.querySelector('tbody')
+  const rows = [...(body?.rows ?? [])]
+  // The first row carries the goods heading and the last one the totals.
+  return rows.length - 2
+})
+eq('the bill is ruled to twenty goods rows', ruled, 20)
 
 // The bank on the bill is whatever the admin saved in Settings — never a
 // value baked into the code.

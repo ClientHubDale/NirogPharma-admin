@@ -99,3 +99,10 @@ export function placeOfSupply(state) {
   const code = STATE_CODES[name]
   return code ? `${name} (${code})` : name
 }
+
+/**
+ * How many goods rows the bill prints, items and blanks together. The client's
+ * printed pad is ruled down the whole page, so a short bill is padded out
+ * rather than stopping a third of the way down the sheet.
+ */
+export const BILL_ROWS = 20

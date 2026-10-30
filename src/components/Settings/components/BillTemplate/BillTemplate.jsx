@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Banknote, FileText, ImageIcon, Loader2, QrCode } from 'lucide-react'
+import { Banknote, FileText, ImageIcon, Loader2, QrCode, X } from 'lucide-react'
 import { TextAreaField } from '@/components/form/TextAreaField'
 import { TextField } from '@/components/form/TextField'
 import api from '@/services/api'
@@ -67,8 +67,27 @@ function PictureField({ label, hint, group, field, url, onSaved }) {
     <div>
       <p className="mb-2 text-sm font-semibold text-ink">{label}</p>
       <div className="flex items-center gap-3">
-        <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-mint-pale bg-bg">
-          {url ? <img src={url} alt="" className="size-full object-contain" /> : <ImageIcon className="size-5 text-ink-muted" />}
+        <div className="relative shrink-0">
+          <div className="grid size-20 place-items-center overflow-hidden rounded-xl border border-mint-pale bg-bg">
+            {url ? <img src={url} alt="" className="size-full object-contain" /> : <ImageIcon className="size-5 text-ink-muted" />}
+          </div>
+          {/* A bill may simply not have one — an old signature or a barcode
+              that has been reissued has to come off, not only be swapped. */}
+          {url && (
+            <button
+              type="button"
+              id={`remove-${field}`}
+              onClick={() => {
+                setError('')
+                onSaved('')
+              }}
+              aria-label={`Remove ${label.toLowerCase()}`}
+              title={`Remove ${label.toLowerCase()}`}
+              className="absolute -right-2 -top-2 grid size-6 place-items-center rounded-full border border-mint-pale bg-white text-ink-muted shadow-sm hover:bg-bg hover:text-destructive"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
         <div className="space-y-1.5">
           <button

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { BILL_COMPANY, BILL_TERMS, billDate, monthYear, placeOfSupply } from './billFormat'
+import { BILL_COMPANY, BILL_ROWS, BILL_TERMS, billDate, monthYear, placeOfSupply } from './billFormat'
 
 const ONES = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN']
 const TENS = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY']
@@ -176,8 +176,10 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
   const totalTax = lines.reduce((sum, line) => sum + (Number(line.taxAmount) || 0), 0)
   const halfTax = Math.round((totalTax / 2) * 100) / 100
 
-  // The printed bill always runs to sixteen rows, filling out with blanks.
-  const blanks = Math.max(0, 3 - lines.length)
+  // The printed bill always runs to twenty rows, filling out with blanks, so a
+  // bill with two items on it still prints down the full page like the
+  // client's own pad does.
+  const blanks = Math.max(0, BILL_ROWS - lines.length)
 
   return (
     <article
