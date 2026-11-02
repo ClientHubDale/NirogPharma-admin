@@ -30,6 +30,7 @@ import { InvoiceLines } from "./components/InvoiceLines";
 import { BILL_COPIES } from "./components/InvoicePrint/billFormat";
 import { InvoicePrint } from "./components/InvoicePrint";
 import {
+  addressOf,
   emptyInvoiceForm,
   formToPayload,
   invoiceToForm,
@@ -161,6 +162,18 @@ export default function InvoiceEditor() {
   };
 
   const firm = distributors.find((row) => row.id === form.distributorId);
+  /**
+   * Which firm the Ship To block belongs to, read back from the address itself
+   * rather than stored. `shipTo` is free text the admin may correct, and a bill
+   * that is reopened carries only that text — so the picker names a firm while
+   * the address still matches one, and shows plain text once it does not.
+   */
+  const shipToFirmId =
+    distributors.find(
+      (row) =>
+        row.id !== form.distributorId &&
+        addressOf(row).trim() === (form.shipTo ?? "").trim(),
+    )?.id ?? "";
   const issued = saved && saved.status !== "PENDING";
   // Whether what is on screen still matches what the server last priced.
   const isDirty =
@@ -639,6 +652,32 @@ export default function InvoiceEditor() {
               // we know, but the goods may go to a godown we do not.
               shipTo: (
                 <div className="space-y-1.5">
+                  {/* The goods often go to another firm we already have on the
+                      books, so that firm is picked and its address copied in.
+                      A godown we do not know is still typed by hand. */}
+                  {!issued && (
+                    <SearchSelect
+                      id="invoice-ship-to-firm"
+                      aria-label="Ship to distributor"
+                      // An address typed by hand belongs to no firm, so the
+                      // picker says what is there rather than "Same as billing".
+                      placeholder={form.shipTo ? "Other address" : "Same as billing"}
+                      limit={10}
+                      clearable
+                      options={distributors
+                        .filter((row) => row.id !== form.distributorId)
+                        .map((row) => ({
+                          value: row.id,
+                          label: row.name,
+                          hint: row.city || row.mobile,
+                        }))}
+                      value={shipToFirmId}
+                      onChange={(id) => {
+                        const other = distributors.find((row) => row.id === id);
+                        update("shipTo", other ? addressOf(other) : "");
+                      }}
+                    />
+                  )}
                   {form.shipTo ? (
                     <>
                       <textarea
@@ -684,12 +723,7 @@ export default function InvoiceEditor() {
                       <button
                         type="button"
                         onClick={() =>
-                          update(
-                            "shipTo",
-                            firm
-                              ? `M/S ${firm.name}\n${firm.address ?? ""}`
-                              : "",
-                          )
+                          update("shipTo", firm ? addressOf(firm) : "M/S ")
                         }
                         disabled={issued}
                         className="inline-flex items-center gap-1 text-[9px] font-semibold text-green-deep underline print:hidden"

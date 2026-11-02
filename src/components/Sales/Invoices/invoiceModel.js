@@ -23,6 +23,17 @@ export const today = () => {
 
 export const emptyLine = () => ({ itemId: '', quantity: '', batches: [] })
 
+/**
+ * A firm's address as it goes on the bill. The goods often travel to another
+ * distributor we already know, so that firm's block is copied in rather than
+ * typed again — and once copied it is ordinary text the admin can correct.
+ */
+export const addressOf = (firm) =>
+  [`M/S ${firm.name}`, firm.address, [firm.state, firm.pincode].filter(Boolean).join(', ')]
+    .filter(Boolean)
+    .join('\n')
+
+
 export const emptyInvoiceForm = (defaults = {}) => ({
   invoiceNo: '',
   distributorId: '',

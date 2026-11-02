@@ -3,6 +3,7 @@ import {
   Boxes,
   CalendarClock,
   ClipboardList,
+  FileMinus2,
   FileText,
   LayoutDashboard,
   Navigation,
@@ -68,7 +69,9 @@ export const adminNav = [
       { label: 'Sales Orders', path: `${ADMIN}/sales/orders` },
       { label: 'Sales Invoices', path: `${ADMIN}/sales/invoices` },
       { label: 'Delivery Challans', path: `${ADMIN}/sales/delivery-challans` },
-      { label: 'Sales Returns', path: `${ADMIN}/sales/returns` },
+      // Sales returns and credit notes were two menu entries for one act: the
+      // goods come back and we owe for them. The note is the document the
+      // client actually raises, so it is the one that is here.
       { label: 'Credit Notes', path: `${ADMIN}/sales/credit-notes` },
     ],
   },
@@ -118,6 +121,9 @@ export const distributorNav = [
   { label: 'Orders', icon: ClipboardList, path: `${DIST}/orders` },
   { label: 'My Stock', icon: Boxes, path: `${DIST}/stock` },
   { label: 'Bills', icon: FileText, path: `${DIST}/bills` },
+  // "क्रेडिट नोट एडमिन और डिस्ट्रीब्यूटर दोनों कर सकें" — a distributor writes
+  // their own and the office issues them.
+  { label: 'Credit Notes', icon: FileMinus2, path: `${DIST}/credit-notes` },
   { label: 'Ledger & Outstanding', icon: Wallet, path: `${DIST}/ledger` },
   { label: 'Payments', icon: WalletCards, path: `${DIST}/payments` },
 ]

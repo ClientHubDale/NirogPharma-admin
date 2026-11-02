@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
-import { FileMinus2 } from 'lucide-react'
+import { Ban, Download, FileMinus2, FileText, Pencil, Plus, Send } from 'lucide-react'
 import { DataTable, listFeatures } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
 import { Notice } from '@/components/data/Notice'
 import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
+import { RowActions } from '@/components/data/RowActions'
 import { StatusPill } from '@/components/data/StatusPill'
+import { useToast } from '@/components/common/Toast'
+import { Button } from '@/components/ui/button'
+import { selectUser } from '@/store/authSlice'
 import { formatINR } from '@/lib/format'
+import { basePathFor, STATUS_LABEL, STATUS_TONE } from './creditNoteModel'
 import * as creditNotesService from '@/services/creditNotesService'
 
 const helper = createColumnHelper(listFeatures)
@@ -18,9 +25,11 @@ const dmy = (iso) => (iso ? iso.split('-').reverse().join('-') : '—')
 /**
  * Sales › Credit Notes — what we owe distributors for stock they sent back.
  *
- * Nothing is created here: a note is raised by the return itself, on Distributor
- * Stocks. "उनका डेबिट नोट आएगा… हम क्रेडिट नोट शो करेंगे" — their debit note is
- * this, and it carries its own number, never the bill's.
+ * This is where a sales return lives now: the note is the document the client
+ * actually raises, so the two menu entries became one. A note is written here
+ * the way a bill is written, and a return recorded on Distributor Stocks
+ * raises one too. "उनका डेबिट नोट आएगा… हम क्रेडिट नोट शो करेंगे" — their
+ * debit note is this, and it carries its own number, never the bill's.
  */
 export default function CreditNotes() {
   const [notes, setNotes] = useState([])
@@ -28,6 +37,10 @@ export default function CreditNotes() {
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [page, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
+  const toast = useToast()
+  const navigate = useNavigate()
+  const base = basePathFor(useLocation().pathname)
+  const isOffice = useSelector(selectUser)?.role !== 'DISTRIBUTOR'
 
   useEffect(() => {
     let alive = true
@@ -51,6 +64,36 @@ export default function CreditNotes() {
 
   const owed = filtered.reduce((sum, n) => sum + Number(n.total || 0), 0)
 
+  /** The note as it prints, on its own page — and the PDF, from the same page. */
+  const openNote = (note, print = false) =>
+    window.open(`${base}/${note.id}/print${print ? '?print=1' : ''}`, '_blank', 'noopener')
+
+  /** Issuing is what brings the goods back onto our shelf. */
+  const issue = async (note) => {
+    try {
+      const fresh = await creditNotesService.issueCreditNote(note.id)
+      setNotes((rows) => rows.map((row) => (row.id === note.id ? { ...row, status: fresh.status } : row)))
+      toast({ tone: 'success', title: `${note.noteNo} issued — the stock is back with us` })
+    } catch (e) {
+      toast({ tone: 'danger', title: creditNotesService.errorFrom(e).message })
+    }
+  }
+
+  /**
+   * A return recorded by mistake has to be undoable: cancelling takes the note
+   * away and puts the goods back on the distributor's books.
+   */
+  const cancel = async (note) => {
+    if (!window.confirm(`Cancel ${note.noteNo}? The stock goes back to ${note.distributorName}.`)) return
+    try {
+      await creditNotesService.cancelCreditNote(note.id)
+      setNotes((rows) => rows.filter((row) => row.id !== note.id))
+      toast({ tone: 'success', title: `${note.noteNo} cancelled` })
+    } catch (e) {
+      toast({ tone: 'danger', title: creditNotesService.errorFrom(e).message })
+    }
+  }
+
   const columns = useMemo(
     () =>
       helper.columns([
@@ -71,13 +114,24 @@ export default function CreditNotes() {
           header: 'Item',
           cell: ({ row }) => (
             <div className="min-w-[11rem]">
-              <p className="truncate">{row.original.itemName}</p>
+              <p className="truncate">
+                {row.original.itemName}
+                {/* A note typed by hand carries several items; the table names
+                    the first and counts the rest. */}
+                {row.original.lineCount > 1 && (
+                  <span className="text-ink-muted"> +{row.original.lineCount - 1} more</span>
+                )}
+              </p>
               <p className="truncate font-mono text-xs text-ink-muted">
                 {row.original.batchNo}
                 {row.original.itemCode ? ` · ${row.original.itemCode}` : ''}
               </p>
             </div>
           ),
+        }),
+        helper.accessor('status', {
+          header: 'Status',
+          cell: (i) => <StatusPill tone={STATUS_TONE[i.getValue()]}>{STATUS_LABEL[i.getValue()] ?? i.getValue()}</StatusPill>,
         }),
         helper.accessor('againstInvoiceNo', {
           header: 'Against bill',
@@ -108,7 +162,34 @@ export default function CreditNotes() {
           meta: { align: 'right' },
           cell: (i) => <span className="font-mono font-bold text-black tabular-nums">{formatINR(i.getValue())}</span>,
         }),
+        helper.display({
+          id: 'actions',
+          header: () => <span className="sr-only">Actions</span>,
+          meta: { align: 'right', className: 'w-12' },
+          cell: ({ row }) => {
+            const note = row.original
+            return (
+              <div onClick={(e) => e.stopPropagation()}>
+                <RowActions
+                  label={`Actions for ${note.noteNo}`}
+                  actions={[
+                    { label: 'Open', icon: Pencil, onSelect: () => navigate(`${base}/${note.id}/edit`) },
+                    { label: 'View note', icon: FileText, onSelect: () => openNote(note) },
+                    { label: 'Download PDF', icon: Download, onSelect: () => openNote(note, true) },
+                    ...(isOffice && note.status === 'PENDING'
+                      ? [{ label: 'Issue', icon: Send, separatorBefore: true, onSelect: () => issue(note) }]
+                      : []),
+                    ...(note.status === 'CANCELLED'
+                      ? []
+                      : [{ label: 'Cancel note', icon: Ban, destructive: true, separatorBefore: true, onSelect: () => cancel(note) }]),
+                  ]}
+                />
+              </div>
+            )
+          },
+        }),
       ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -117,7 +198,11 @@ export default function CreditNotes() {
       <PageHeader
         title="Credit Notes"
         subtitle={`${filtered.length} ${filtered.length === 1 ? 'note' : 'notes'} · ${formatINR(owed)} owed back`}
-      />
+      >
+        <Button onClick={() => navigate(`${base}/new`)}>
+          <Plus data-icon="inline-start" /> Create credit note
+        </Button>
+      </PageHeader>
 
       {error && <Notice tone="danger">{error}</Notice>}
 
@@ -142,7 +227,7 @@ export default function CreditNotes() {
         </div>
 
         <p className="mb-3 text-xs text-ink-muted">
-          A credit note is raised by a return on Distributor Stocks — it is not created here.
+          Save records the note; Issue is what brings the stock back. A return recorded on Distributor Stocks raises one too.
         </p>
 
         {loading ? (
@@ -154,6 +239,7 @@ export default function CreditNotes() {
             data={filtered}
             columns={columns}
             getRowId={(row) => row.id}
+            onRowClick={(note) => navigate(`${base}/${note.id}/edit`)}
             pagination={page}
             onPaginationChange={setPagination}
             empty={
@@ -163,10 +249,14 @@ export default function CreditNotes() {
                 description={
                   search
                     ? 'Nothing matches that search.'
-                    : 'When a distributor sends stock back, recording the return on Distributor Stocks raises the credit note here.'
+                    : 'Write one when a distributor sends stock back — or record the return on Distributor Stocks and the note is raised here.'
                 }
               >
-                {!search && <StatusPill tone="neutral">Stocks › Distributor Stocks › ⋯ › Record a return</StatusPill>}
+                {!search && (
+                  <Button onClick={() => navigate(`${base}/new`)}>
+                    <Plus data-icon="inline-start" /> Create credit note
+                  </Button>
+                )}
               </EmptyState>
             }
           />

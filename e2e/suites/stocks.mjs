@@ -50,6 +50,15 @@ const openRowMenu = async (label) => {
 }
 
 const cleanup = async () => {
+  // A return raises a credit note, and an item on a credit note cannot be
+  // deleted — so the notes this suite raised go first, or the next run finds
+  // its item still here and cannot seed.
+  const ours = new Set(
+    ((await api('/items?limit=200')).data?.items ?? []).filter((item) => item.code?.startsWith('E2E-STK')).map((item) => item.name),
+  )
+  for (const note of (await api('/credit-notes?limit=200')).data?.notes ?? []) {
+    if (ours.has(note.itemName)) await api(`/credit-notes/${note.id}`, { method: 'DELETE' })
+  }
   for (const item of (await api('/items?limit=200')).data?.items ?? []) {
     if (item.code?.startsWith('E2E-STK')) await api(`/items/${item.id}`, { method: 'DELETE' })
   }
@@ -463,6 +472,7 @@ has('…and what running low means, with the number', await pageText(page), 'Run
 
 const lit = await page.$$eval('tbody tr', (trs) =>
   trs.map((tr) => ({
+    distributor: tr.querySelectorAll('td')[0]?.innerText.split('\n')[0] ?? '',
     item: tr.querySelectorAll('td')[1]?.innerText.split('\n')[0] ?? '',
     dot: tr.querySelector('span[aria-label]')?.getAttribute('aria-label') ?? '',
     lowBadge: Boolean(tr.querySelector('td:nth-last-child(2) .bg-danger-soft')),
@@ -472,12 +482,25 @@ const lit = await page.$$eval('tbody tr', (trs) =>
 ok('every row carries a movement colour', lit.every((r) => r.dot), JSON.stringify(lit.slice(0, 3)))
 ok('some stock is selling', lit.some((r) => /selling well/i.test(r.dot)), JSON.stringify(lit.map((r) => r.dot)))
 
-// A holding at or under the threshold marks only its closing figure.
-const low = (await api('/stocks/distributors?from=2026-04-01&to=2027-03-31')).data.rows.find((r) => r.stockState === 'LOW' || r.stockState === 'OUT')
-if (low) {
-  const row = lit.find((r) => r.item === low.itemName)
-  ok('stock running out marks its closing figure', row?.lowBadge, JSON.stringify(row))
-  ok('…and does not redden the whole row', !row?.expiredRow, JSON.stringify(row))
+// A holding at or under the threshold marks only its closing figure. The
+// screen opens on 1 April to the end of this month, so the server has to be
+// asked the same question — a whole-year total is a different figure and would
+// disagree with what is on screen.
+const now = new Date()
+const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+const onScreen = `from=${fyStart}-04-01&to=${endOfMonth.toISOString().slice(0, 10)}`
+
+const running = (await api(`/stocks/distributors?${onScreen}`)).data.rows.filter(
+  (r) => r.stockState === 'LOW' || r.stockState === 'OUT',
+)
+// A holding is one firm's of one item, and several firms hold the same item —
+// so the row has to be found by both, or this reads another firm's figure.
+for (const low of running) {
+  const row = lit.find((r) => r.item === low.itemName && r.distributor === low.distributorName)
+  if (!row) continue
+  ok(`${low.distributorName}'s ${low.itemName} marks its closing figure`, row.lowBadge, JSON.stringify(row))
+  ok('…and does not redden the whole row', !row.expiredRow, JSON.stringify(row))
 }
 
 // Expired stock is the loudest thing on the screen: the whole row. An issued

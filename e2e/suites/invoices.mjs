@@ -54,7 +54,11 @@ const item = (await api('/items', {
   body: JSON.stringify({ ...ITEM, unit: 'BTL', category: 'Syrup', mrp: 600, gst: 5 }),
 })).data.item
 
-const firm = (await api('/distributors?limit=100')).data.distributors[0]
+const allFirms = (await api('/distributors?limit=100')).data.distributors ?? []
+const firm = allFirms[0]
+// The goods sometimes go to a second firm we already know, so the suite needs
+// another one on the books to pick from the Ship To list.
+const elsewhere = allFirms.find((row) => row.id !== firm?.id)
 if (!firm) {
   console.log('FAIL  a distributor is needed to bill — none in the database')
   process.exit(1)
@@ -89,6 +93,34 @@ await pickOption(page, '#invoice-distributor', firm.name)
 await sleep(400)
 has('picking the firm shows its address', await pageText(page), firm.name)
 has('and whether it has a GST number', await pageText(page), firm.gstin ? firm.gstin : 'unregistered')
+
+/* ── ship to ──────────────────────────────────────────────────────────── */
+
+// "सम टाइम इट विल डिफरेंट डिस्ट्रीब्यूटर ऑन शिप टू" — the bill is to one firm
+// and the goods go to another we already know, so that firm is picked rather
+// than its address typed again.
+has('ship to starts the same as the billing firm', await pageText(page), 'Same as billing')
+ok('and offers the other firms to send the goods to', await page.$('#invoice-ship-to-firm'), 'no ship-to picker')
+
+if (elsewhere) {
+  await pickOption(page, '#invoice-ship-to-firm', elsewhere.name)
+  await sleep(400)
+  const typed = await page.$eval('#invoice-ship-to', (el) => el.value)
+  has('picking a firm copies its address into ship to', typed, elsewhere.name)
+  if (elsewhere.state) has('…with the state it sits in', typed, elsewhere.state)
+  ok('and the bill still says who pays', (await pageText(page)).includes(firm.name), 'bill-to lost its firm')
+
+  // Copied in, it is ordinary text — the admin corrects a door number without
+  // the picker fighting him for it.
+  await page.$eval('#invoice-ship-to', (el) => el.select())
+  await page.type('#invoice-ship-to', 'M/S HAND TYPED GODOWN')
+  await sleep(300)
+  eq('an address typed over the top stays typed', await page.$eval('#invoice-ship-to', (el) => el.value), 'M/S HAND TYPED GODOWN')
+
+  await clickText(page, 'button', 'Same as billing')
+  await sleep(300)
+  ok('and Same as billing clears it again', !(await page.$('#invoice-ship-to')), 'the ship-to box is still there')
+}
 
 await page.type('#invoice-credit-days', '30')
 
@@ -300,12 +332,27 @@ for (const id of ['#bank-branch', '#bank-ifsc', '#bank-account', '#bank-holder']
 // letterhead is left alone.
 await clickText(page, 'nav button', 'Bill template')
 await sleep(1000)
-for (const id of ['#remove-logoUrl', '#remove-signatureUrl', '#remove-barcodeUrl']) {
-  ok(`${id.slice(8)} can be removed`, Boolean(await page.$(id)))
+// The cross belongs to a picture that is there — a letterhead with no QR
+// saved has nothing to take off, so the rule is asserted, not the data.
+const pictures = (await api('/settings')).data.settings
+const crosses = [
+  ['#remove-logoUrl', pictures.company.logoUrl],
+  ['#remove-signatureUrl', pictures.company.signatureUrl],
+  ['#remove-barcodeUrl', pictures.bank.barcodeUrl],
+]
+for (const [id, url] of crosses) {
+  eq(`${id.slice(8)} offers a cross only when one is set`, Boolean(await page.$(id)), Boolean(url))
 }
-await page.click('#remove-signatureUrl')
-await sleep(300)
-ok('and the cross clears the picture', !(await page.$('#remove-signatureUrl')))
+// Whichever picture the letterhead happens to carry — the admin may have taken
+// the others off for real, and a suite must not insist on one in particular.
+const standing = crosses.find(([, url]) => Boolean(url))
+if (standing) {
+  await page.click(standing[0])
+  await sleep(300)
+  ok(`the cross clears ${standing[0].slice(8)}`, !(await page.$(standing[0])))
+} else {
+  ok('no picture is saved, so there is no cross to try', true)
+}
 
 /* ── a saved bill opens as the bill ──────────────────────────────────── */
 

@@ -31,8 +31,9 @@ const SalesOrders = lazy(() => import('@/components/Sales/SalesOrders/SalesOrder
 const SalesInvoices = lazy(() => import('@/components/Sales/Invoices/Invoices'))
 const InvoiceEditor = lazy(() => import('@/components/Sales/Invoices/InvoiceEditor'))
 const InvoicePrintPage = lazy(() => import('@/components/Sales/Invoices/InvoicePrintPage'))
+const CreditNotePrintPage = lazy(() => import('@/components/Sales/CreditNotes/CreditNotePrintPage'))
+const CreditNoteEditor = lazy(() => import('@/components/Sales/CreditNotes/CreditNoteEditor'))
 const DeliveryChallans = lazy(() => import('@/components/Sales/DeliveryChallans/DeliveryChallans'))
-const SalesReturns = lazy(() => import('@/components/Sales/SalesReturns/SalesReturns'))
 const CreditNotes = lazy(() => import('@/components/Sales/CreditNotes/CreditNotes'))
 const PurchaseOrders = lazy(() => import('@/components/Purchase/PurchaseOrders/PurchaseOrders'))
 const PurchaseInvoices = lazy(() => import('@/components/Purchase/PurchaseInvoices/PurchaseInvoices'))
@@ -78,7 +79,6 @@ const BUILT = {
   '/admin/sales/orders': SalesOrders,
   '/admin/sales/invoices': SalesInvoices,
   '/admin/sales/delivery-challans': DeliveryChallans,
-  '/admin/sales/returns': SalesReturns,
   '/admin/sales/credit-notes': CreditNotes,
   '/admin/purchase/orders': PurchaseOrders,
   '/admin/purchase/invoices': PurchaseInvoices,
@@ -93,6 +93,7 @@ const BUILT = {
   '/admin/users/payouts': PayoutsPage,
   '/admin/settings': SettingsPage,
   '/distributor': DistributorDashboard,
+  '/distributor/credit-notes': CreditNotes,
 }
 
 function Lazy({ page: Page, ...props }) {
@@ -135,9 +136,12 @@ export function AppRouter() {
           <Route path="/login" element={<Login />} />
         </Route>
 
-        {/* The printed bill stands alone — no sidebar, no header, just the sheet. */}
+        {/* The printed bill and credit note stand alone — no sidebar, no
+            header, just the sheet. */}
         <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>
           <Route path="/admin/sales/invoices/:invoiceId/print" element={<Lazy page={InvoicePrintPage} />} />
+          <Route path="/admin/sales/credit-notes/:noteId/print" element={<Lazy page={CreditNotePrintPage} />} />
+          <Route path="/distributor/credit-notes/:noteId/print" element={<Lazy page={CreditNotePrintPage} />} />
         </Route>
 
         <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>
@@ -150,6 +154,8 @@ export function AppRouter() {
             <Route path="/admin/inventory/price-lists/:priceListId/edit" element={<Lazy page={PriceListEditor} />} />
             <Route path="/admin/sales/invoices/new" element={<Lazy page={InvoiceEditor} />} />
             <Route path="/admin/sales/invoices/:invoiceId/edit" element={<Lazy page={InvoiceEditor} />} />
+            <Route path="/admin/sales/credit-notes/new" element={<Lazy page={CreditNoteEditor} />} />
+            <Route path="/admin/sales/credit-notes/:noteId/edit" element={<Lazy page={CreditNoteEditor} />} />
             {salesEditorRoutes()}
             <Route path="/admin/attendance/:userId" element={<Lazy page={UserAttendance} />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
@@ -159,6 +165,8 @@ export function AppRouter() {
         <Route element={<ProtectedRoute allow={[ROLES.DISTRIBUTOR]} />}>
           <Route path="/distributor" element={<AppShell />}>
             {roleRoutes(distributorNav, '/distributor')}
+            <Route path="/distributor/credit-notes/new" element={<Lazy page={CreditNoteEditor} />} />
+            <Route path="/distributor/credit-notes/:noteId/edit" element={<Lazy page={CreditNoteEditor} />} />
             <Route path="*" element={<Navigate to="/distributor" replace />} />
           </Route>
         </Route>

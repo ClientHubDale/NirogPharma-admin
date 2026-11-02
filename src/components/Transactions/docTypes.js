@@ -13,7 +13,7 @@
  * tally.inward        — party is credited, not debited (returns, credit notes,
  *                       and every purchase bill)
  */
-import { ClipboardList, FileMinus, FileText, PackageCheck, ReceiptIndianRupee, RotateCcw, ShoppingCart, Truck, Undo2 } from 'lucide-react'
+import { ClipboardList, FileText, PackageCheck, ReceiptIndianRupee, RotateCcw, ShoppingCart, Truck } from 'lucide-react'
 
 const PENDING = { value: 'PENDING', label: 'Pending', tone: 'warning', action: 'Move to pending' }
 const APPROVED = { value: 'APPROVED', label: 'Approved', tone: 'success', action: 'Approve' }
@@ -82,7 +82,6 @@ export const DOC_TYPES = {
     excludedStatuses: ['CANCELLED'],
     convertsTo: [
       { type: 'DELIVERY_CHALLAN', sourceStatus: 'DISPATCHED' },
-      { type: 'SALES_RETURN' },
     ],
     // Invoices are what customers pay against, so Due stays visible — Comment
     // gives up its place so Status still fits on a laptop screen.
@@ -105,42 +104,6 @@ export const DOC_TYPES = {
     hiddenColumns: { gstin: false, due: false },
     emptyText: 'Send goods out with a challan — vehicle and e-way bill numbers can be switched on in ⚙ settings.',
   },
-  SALES_RETURN: {
-    type: 'SALES_RETURN',
-    noun: 'sales return',
-    plural: 'sales returns',
-    title: 'Sales Returns',
-    icon: Undo2,
-    prefix: 'SR',
-    basePath: '/admin/sales/returns',
-    tally: { voucherType: 'Credit Note', ledger: 'Sales Return', inward: true },
-    statuses: [PENDING, APPROVED, REJECTED],
-    defaultStatus: 'PENDING',
-    excludedStatuses: ['REJECTED'],
-    convertsTo: [{ type: 'CREDIT_NOTE', sourceStatus: 'APPROVED' }],
-    limitToSource: true, // can't return more than the invoice sold
-    hiddenColumns: { gstin: false, due: false },
-    emptyText: 'Record goods a customer sent back — or open an invoice and choose “Convert to sales return”.',
-  },
-  CREDIT_NOTE: {
-    type: 'CREDIT_NOTE',
-    noun: 'credit note',
-    plural: 'credit notes',
-    title: 'Credit Notes',
-    icon: FileMinus,
-    prefix: 'CN',
-    basePath: '/admin/sales/credit-notes',
-    tally: { voucherType: 'Credit Note', ledger: 'Sales Return', inward: true },
-    statuses: [PENDING, APPROVED, { value: 'CLOSED', label: 'Closed', tone: 'neutral', action: 'Close' }],
-    defaultStatus: 'PENDING',
-    excludedStatuses: [],
-    convertsTo: [],
-    limitToSource: true,
-    hiddenColumns: { gstin: false, due: false },
-    emptyText: 'Credit a customer for returns, rate differences or damage — approved notes reduce what they owe.',
-  },
-
-  /* ── Purchase ─────────────────────────────────────────── */
   PURCHASE_ORDER: {
     type: 'PURCHASE_ORDER',
     noun: 'purchase order',
