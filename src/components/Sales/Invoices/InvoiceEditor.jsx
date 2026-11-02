@@ -28,6 +28,7 @@ import { fetchBatches, selectBatches } from "@/store/stockSlice";
 import { usePriceTiers } from "@/hooks/usePriceTiers";
 import { InvoiceLines } from "./components/InvoiceLines";
 import { BILL_COPIES } from "./components/InvoicePrint/billFormat";
+import { letterheadFor } from "@/lib/letterhead";
 import { InvoicePrint } from "./components/InvoicePrint";
 import {
   addressOf,
@@ -160,6 +161,14 @@ export default function InvoiceEditor() {
     if (errors[field])
       setErrors((current) => ({ ...current, [field]: undefined }));
   };
+
+  // What a saved bill prints with: its own copy of the letterhead, falling
+  // back to today's settings for bills made before documents kept one.
+  const paper = letterheadFor(saved, {
+    company: companySettings,
+    bank,
+    invoice: rules,
+  });
 
   const firm = distributors.find((row) => row.id === form.distributorId);
   /**
@@ -488,14 +497,16 @@ export default function InvoiceEditor() {
           id="bill-sheet"
           className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6"
         >
+          {/* A bill that exists shows the letterhead it was written with, so
+              what is on screen is what will come out of the printer. */}
           <InvoicePrint
             invoice={saved}
-            bank={bank}
-            company={companySettings}
-            taxRate={rules.defaultGstRate}
+            bank={paper.bank}
+            company={paper.company}
+            taxRate={paper.taxRate}
             show={{
-              vehicleNo: rules.showVehicleNo !== false,
-              ewayBillNo: rules.showEwayBill !== false,
+              vehicleNo: paper.show.vehicleNo,
+              ewayBillNo: paper.show.ewayBillNo,
             }}
             slots={{ copyChoice: copyPicker }}
           />
@@ -505,6 +516,8 @@ export default function InvoiceEditor() {
           id="bill-sheet"
           className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6"
         >
+          {/* Being typed, so it shows today's letterhead — which is the one
+              the next save will copy onto it. */}
           <InvoicePrint
             invoice={asBill}
             bank={bank}

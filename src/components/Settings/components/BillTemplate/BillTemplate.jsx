@@ -135,6 +135,17 @@ export function BillTemplate({ company, bank, onChange, onChangeBank }) {
 
   return (
     <div className="space-y-5">
+      {/* A bill keeps a copy of the letterhead it was written with, so changing
+          one here never reaches back into bills already made. Saying so here
+          saves the admin wondering whether it did. */}
+      <p
+        id="bill-template-scope"
+        className="rounded-xl border border-mint-pale bg-mint-pale/40 px-4 py-3 text-xs leading-relaxed text-ink"
+      >
+        Changes here apply to bills and credit notes issued from now on. Anything already issued keeps the
+        letterhead it went out with, so a reprint matches the copy the distributor is holding.
+      </p>
+
       <Card icon={FileText} title="Letterhead" hint="Printed across the top of every bill.">
         {field('Heading', 'heading', { placeholder: 'TAX INVOICE' })}
         {field('Company name', 'name')}

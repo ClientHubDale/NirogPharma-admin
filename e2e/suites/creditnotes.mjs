@@ -85,6 +85,22 @@ const note = (await api(`/credit-notes/${raised.id}`)).data.note
 eq('the note knows which bill it is against', note.againstInvoiceNo, 'E2E/CN/777')
 ok('and inside UP it credits CGST and SGST', note.interState === false && note.igst === 0, JSON.stringify({ i: note.interState, igst: note.igst }))
 
+// The note keeps the letterhead it was written with, as a bill does: a new
+// logo or a changed bank account must not reach back into one already out.
+ok('the note keeps its own letterhead', Boolean(note.letterhead), JSON.stringify(note.letterhead))
+ok('…the bank the credit refers to with it', 'accountNumber' in (note.letterhead?.bank ?? {}), JSON.stringify(note.letterhead?.bank))
+
+const beforeLogo = note.letterhead?.company?.logoUrl
+const realCompany = (await api('/settings')).data.settings.company
+await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: 'https://example.test/e2e-cn-logo.png' }) })
+eq(
+  'a new logo in settings leaves it alone',
+  (await api(`/credit-notes/${raised.id}`)).data.note.letterhead?.company?.logoUrl,
+  beforeLogo,
+)
+await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: realCompany.logoUrl }) })
+eq('and the real logo goes back as it was', (await api('/settings')).data.settings.company.logoUrl, realCompany.logoUrl)
+
 const { browser, page, errors } = await start()
 await login(page)
 

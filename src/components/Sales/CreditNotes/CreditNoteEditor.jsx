@@ -18,6 +18,7 @@ import { selectUser } from '@/store/authSlice'
 import { fetchDistributors, selectDistributors } from '@/store/distributorsSlice'
 import { fetchSettings, saveSettingsGroup, selectBank, selectCompanySettings, selectInvoiceSettings } from '@/store/settingsSlice'
 import { BILL_COPIES } from '@/components/Sales/Invoices/components/InvoicePrint/billFormat'
+import { letterheadFor } from '@/lib/letterhead'
 import { CreditNotePrint } from './components/CreditNotePrint'
 import { CreditNoteLines } from './components/CreditNoteLines'
 import {
@@ -285,6 +286,15 @@ export default function CreditNoteEditor() {
   }
 
   const sheet = reviewing && saved ? saved : asNote
+  /**
+   * A note that exists prints the letterhead it was written with; one still
+   * being typed shows today's, which is what the next save will copy onto it.
+   */
+  const paper = letterheadFor(reviewing && saved ? saved : null, {
+    company: companySettings,
+    bank,
+    invoice: rules,
+  })
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -352,9 +362,9 @@ export default function CreditNoteEditor() {
       <div id="bill-sheet" className="rounded-2xl border border-mint-pale bg-white p-4 sm:p-6">
         <CreditNotePrint
           note={sheet}
-          bank={bank}
-          company={companySettings}
-          taxRate={rules.defaultGstRate}
+          bank={paper.bank}
+          company={paper.company}
+          taxRate={paper.taxRate}
           slots={
             reviewing && saved
               ? { copyChoice: copyPicker }

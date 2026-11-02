@@ -265,6 +265,58 @@ ok('the factory ledger carries the invoice number', movements.some((move) => mov
 const issued = (await api(`/invoices?q=${encodeURIComponent(NUMBER)}`)).data.invoices[0]
 eq('the bill is confirmed', issued.status, 'CONFIRMED')
 
+/* ── the letterhead the bill went out with ────────────────────────────── */
+
+// A bill borrowed the letterhead from Settings on every print, so changing the
+// logo — or the bank account — used to rewrite every bill ever made. It keeps
+// its own copy now: the one the distributor is holding has to reprint the same.
+const stamped = (await api(`/invoices/${saved.id}`)).data.invoice
+ok('an issued bill keeps its own letterhead', Boolean(stamped.letterhead), JSON.stringify(stamped.letterhead))
+ok('…the pictures with it', 'logoUrl' in (stamped.letterhead?.company ?? {}), JSON.stringify(stamped.letterhead?.company))
+ok('…and the bank the money goes to', 'accountNumber' in (stamped.letterhead?.bank ?? {}), JSON.stringify(stamped.letterhead?.bank))
+ok('but the list does not carry it, being a kilobyte a row', !('letterhead' in issued), Object.keys(issued).join(' '))
+
+const realLetterhead = (await api('/settings')).data.settings
+await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: 'https://example.test/e2e-new-logo.png' }) })
+await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: 'E2E REPLACEMENT BANK' }) })
+
+const reprint = (await api(`/invoices/${saved.id}`)).data.invoice
+eq('a new logo in settings leaves it alone', reprint.letterhead?.company?.logoUrl, stamped.letterhead?.company?.logoUrl)
+eq('and so does a new bank account', reprint.letterhead?.bank?.bankName, stamped.letterhead?.bank?.bankName)
+
+// The sheet on screen is what comes out of the printer, so the old logo has to
+// be the one the page asks for.
+await goto(page, `/admin/sales/invoices/${saved.id}/print`)
+await sleep(1500)
+const printed = await page.$$eval('img', (els) => els.map((el) => el.getAttribute('src')))
+ok(
+  'the printed sheet asks for the old logo, not the new one',
+  !printed.some((src) => (src ?? '').includes('e2e-new-logo')),
+  printed.join(' '),
+)
+
+// A bill made now takes today's letterhead, draft and all — "draft new logo
+// which is selected on save draft time".
+const fresh = (await api('/invoices', {
+  method: 'POST',
+  body: JSON.stringify({
+    invoiceNo: 'E2E/26-27/009',
+    distributorId: firm.id,
+    invoiceDate: '2026-11-03',
+    lines: [{ itemId: item.id, quantity: 1, batches: [] }],
+  }),
+})).data?.invoice
+eq('a draft saved now takes the logo that is there now', fresh?.letterhead?.company?.logoUrl, 'https://example.test/e2e-new-logo.png')
+eq('…and the bank that is there now', fresh?.letterhead?.bank?.bankName, 'E2E REPLACEMENT BANK')
+if (fresh) await api(`/invoices/${fresh.id}`, { method: 'DELETE' })
+
+// Put the real letterhead back before anything else runs.
+await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: realLetterhead.company.logoUrl }) })
+await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: realLetterhead.bank.bankName }) })
+const restored = (await api('/settings')).data.settings
+eq('and the real letterhead goes back as it was', restored.company.logoUrl, realLetterhead.company.logoUrl)
+eq('…bank included', restored.bank.bankName, realLetterhead.bank.bankName)
+
 /* ── an issued bill is locked ─────────────────────────────────────────── */
 
 await goto(page, `/admin/sales/invoices/${saved.id}/edit`)
@@ -389,21 +441,43 @@ const ruled = await page.evaluate(() => {
 })
 eq('the bill is ruled to twenty goods rows', ruled, 20)
 
-// The bank on the bill is whatever the admin saved in Settings — never a
-// value baked into the code.
+// The bank on the bill is whatever the admin saved in Settings — never a value
+// baked into the code. It reaches the bills written after it is saved: an
+// existing bill keeps the account it already went out asking for, which is
+// checked where the letterhead is.
 const bankBefore = (await api('/settings')).data.settings.bank
 await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: 'E2E TEST BANK', ifsc: 'E2EB0001234', accountNumber: '9988776655', branch: 'E2E BRANCH' }) })
-await goto(page, `/admin/sales/invoices/${anyBill.id}/print`)
+
+const onNewBank = (await api('/invoices', {
+  method: 'POST',
+  body: JSON.stringify({
+    invoiceNo: 'E2E/26-27/BANK',
+    distributorId: firm.id,
+    invoiceDate: '2026-11-03',
+    lines: [{ itemId: item.id, quantity: 1, batches: [] }],
+  }),
+})).data?.invoice
+await goto(page, `/admin/sales/invoices/${onNewBank.id}/print`)
 await sleep(1800)
 const withBank = await pageText(page)
-has('the bill shows the bank the admin saved', withBank, 'E2E TEST BANK')
+has('a bill written now shows the bank the admin saved', withBank, 'E2E TEST BANK')
 has('…with its IFSC', withBank, 'E2EB0001234')
 has('…and the account number', withBank, '9988776655')
 
 await api('/settings/bank', { method: 'PATCH', body: JSON.stringify(bankBefore) })
-await goto(page, `/admin/sales/invoices/${anyBill.id}/print`)
+const onRealBank = (await api('/invoices', {
+  method: 'POST',
+  body: JSON.stringify({
+    invoiceNo: 'E2E/26-27/BANK2',
+    distributorId: firm.id,
+    invoiceDate: '2026-11-03',
+    lines: [{ itemId: item.id, quantity: 1, batches: [] }],
+  }),
+})).data?.invoice
+await goto(page, `/admin/sales/invoices/${onRealBank.id}/print`)
 await sleep(1800)
-ok('and it follows Settings back again', !(await pageText(page)).includes('E2E TEST BANK'))
+ok('and the next one follows Settings back again', !(await pageText(page)).includes('E2E TEST BANK'))
+for (const row of [onNewBank, onRealBank]) if (row) await api(`/invoices/${row.id}`, { method: 'DELETE' })
 
 await cleanup()
 const left = await api('/invoices?limit=100')

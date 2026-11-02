@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useParams, useSearchParams } from 'react-router-dom'
 import * as invoicesService from '@/services/invoicesService'
 import { fetchSettings, selectBank, selectCompanySettings, selectInvoiceSettings } from '@/store/settingsSlice'
+import { letterheadFor } from '@/lib/letterhead'
 import { COPY_LABEL } from './components/InvoicePrint/billFormat'
 import { InvoicePrint } from './components/InvoicePrint'
 
@@ -75,21 +76,21 @@ export default function InvoicePrintPage() {
     )
   }
 
+  // The bill prints the letterhead it was written with, not today's — so a new
+  // logo or a changed bank account leaves bills already made alone.
+  const paper = letterheadFor(invoice, { company, bank, invoice: rules })
+
   return (
     <div className="min-h-screen bg-bg py-6 print:bg-white print:py-0">
       {copies.map((copy, index) => (
         <div key={copy} className={index > 0 ? 'mt-8 break-before-page print:mt-0' : undefined}>
           <InvoicePrint
             invoice={invoice}
-            bank={bank}
-            company={company}
-            taxRate={rules.defaultGstRate}
+            bank={paper.bank}
+            company={paper.company}
+            taxRate={paper.taxRate}
             copy={copy}
-            show={{
-              vehicleNo: rules.showVehicleNo !== false,
-              ewayBillNo: rules.showEwayBill !== false,
-              creditPeriod: rules.showCreditPeriod !== false,
-            }}
+            show={paper.show}
           />
         </div>
       ))}
