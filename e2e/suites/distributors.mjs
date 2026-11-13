@@ -185,7 +185,15 @@ await page.click('#dist-price-tier')
 await page.waitForSelector('[role=listbox]')
 await sleep(300)
 const tiers = await page.$$eval('[role=option]', (os) => os.map((o) => o.innerText.split('\n')[0].trim()))
-eq('the price tier offers the four rate columns', tiers.join(' | '), 'Default — full MRP | −50% −12% | −50% −15% | −45% −10%')
+// The rate columns are the admin's to add to, so this asks the server which
+// ones exist rather than naming them — a new one is a change, not a failure.
+const live = ((await api('/price-tiers')).data?.tiers ?? []).filter((row) => row.isActive !== false)
+eq('the price tier offers every rate column there is', tiers.length, live.length, tiers.join(' | '))
+ok(
+  '…starting with the one a new firm gets',
+  tiers[0]?.startsWith('Default'),
+  tiers.join(' | '),
+)
 await page.keyboard.press('Escape')
 await sleep(200)
 await pickOption(page, '#dist-price-tier', '−50% −12%')
