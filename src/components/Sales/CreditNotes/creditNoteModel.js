@@ -27,8 +27,16 @@ export const today = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * One bill the returned goods went out on. A note may name more than one —
+ * "बिल नंबर थ्री से कर रहा है या बिल नंबर फाइव से" — and each prints beside
+ * its own date. Free text on purpose: goods from before the system have a
+ * number nothing here can match.
+ */
+export const emptyAgainstBill = () => ({ no: '', date: '', invoiceId: '' })
+
 /** A line names one batch: the goods have to go back where they came from. */
-export const emptyLine = () => ({ itemId: '', batchId: '', quantity: '', boxes: '' })
+export const emptyLine = () => ({ itemId: '', batchId: '', quantity: '', boxes: '', againstInvoiceId: '' })
 
 export const emptyCreditNoteForm = (defaults = {}) => ({
   noteNo: '',
@@ -40,7 +48,7 @@ export const emptyCreditNoteForm = (defaults = {}) => ({
   transport: '',
   vehicleNo: '',
   station: '',
-  againstInvoiceNo: '',
+  againstInvoices: [emptyAgainstBill()],
   otherCharges: '',
   note: '',
   lines: [emptyLine()],
@@ -58,7 +66,9 @@ export const creditNoteToForm = (note) => ({
   transport: note.transport ?? '',
   vehicleNo: note.vehicleNo ?? '',
   station: note.station ?? '',
-  againstInvoiceNo: note.againstInvoiceNo ?? '',
+  againstInvoices: (note.againstInvoices ?? []).length
+    ? note.againstInvoices.map((row) => ({ no: row.no ?? '', date: row.date ?? '', invoiceId: row.invoiceId ?? '' }))
+    : [emptyAgainstBill()],
   otherCharges: Number(note.otherCharges) ? String(note.otherCharges) : '',
   note: note.note ?? '',
   lines: (note.lines ?? []).map((line) => ({
@@ -66,6 +76,7 @@ export const creditNoteToForm = (note) => ({
     batchId: line.batchId ?? '',
     quantity: String(line.quantity),
     boxes: line.boxes === null || line.boxes === undefined ? '' : String(line.boxes),
+    againstInvoiceId: line.againstInvoiceId ?? '',
   })),
 })
 
@@ -80,7 +91,10 @@ export const formToPayload = (form) => ({
   transport: form.transport.trim(),
   vehicleNo: form.vehicleNo.trim(),
   station: form.station.trim(),
-  againstInvoiceNo: form.againstInvoiceNo.trim(),
+  // Blank rows are what an untouched "+ Add another bill" leaves behind.
+  againstInvoices: (form.againstInvoices ?? [])
+    .map((row) => ({ no: row.no.trim(), date: row.date, invoiceId: row.invoiceId }))
+    .filter((row) => row.no || row.date),
   otherCharges: Number(form.otherCharges) || 0,
   note: form.note.trim(),
   lines: form.lines
@@ -90,21 +104,47 @@ export const formToPayload = (form) => ({
       batchId: line.batchId,
       quantity: Number(line.quantity),
       boxes: Number(line.boxes) || 0,
+      againstInvoiceId: line.againstInvoiceId,
     })),
 })
+
+/**
+ * Which bill sets a line's rate.
+ *
+ * A return is money going back on a sale that already happened, so the bill's
+ * own rate is the one that counts — the rate column may have moved since. The
+ * admin can name the bill on the line; when he has not, it is the first bill
+ * on the note that actually carried this item. Stated here and matched on the
+ * server, so the sheet shows while typing what the save will store.
+ */
+export function billForLine({ line, bills, againstInvoices }) {
+  const byId = (id) => bills.find((bill) => bill.id === id)
+  if (line.againstInvoiceId) {
+    const told = byId(line.againstInvoiceId)
+    return told?.lines.some((row) => row.itemId === line.itemId) ? told : null
+  }
+  return (
+    (againstInvoices ?? [])
+      .map((row) => byId(row.invoiceId))
+      .find((bill) => bill?.lines.some((row) => row.itemId === line.itemId)) ?? null
+  )
+}
 
 /**
  * What a line will come to, worked out the same way the server does so the
  * sheet can show it while it is being typed.
  */
-export function previewLine({ item, tier, tiers, quantity }) {
+export function previewLine({ item, tier, tiers, quantity, bill }) {
   if (!item) return null
+  const onBill = bill?.lines.find((row) => row.itemId === item.id)
   const stored = (item.tierPrices ?? []).find((row) => row.tier === tier)
   const multiplier = tiers.find((row) => row.code === tier)?.multiplier
-  const gross = stored ? Number(stored.price) : priceWith(Number(item.mrp), multiplier)
-  if (gross === null || gross === undefined) return null
+  const gross = onBill ? Number(onBill.grossRate) : stored ? Number(stored.price) : priceWith(Number(item.mrp), multiplier)
+  if (gross === null || gross === undefined || Number.isNaN(gross)) return null
 
-  const gst = Number(item.gst) || 0
+  // The GST comes off the bill too: it follows the HSN code, and the code can
+  // have been reclassified since the goods went out.
+  const gst = onBill ? Number(onBill.gstRate) || 0 : Number(item.gst) || 0
   const qty = Number(quantity) || 0
   const grossPaise = Math.round(gross * 100)
   const ratePaise = Math.round(grossPaise / (1 + gst / 100))

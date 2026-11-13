@@ -16,7 +16,9 @@ import { Switch } from '@/components/form/Switch'
 import { Button } from '@/components/ui/button'
 import { tierLabels } from '@/constants/priceTiers'
 import { usePriceTiers } from '@/hooks/usePriceTiers'
+import { cn } from '@/lib/utils'
 import { googleMapsUrl } from '@/lib/geo'
+import * as paymentsService from '@/services/paymentsService'
 import { formatINR } from '@/lib/format'
 import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
 import {
@@ -68,12 +70,34 @@ export default function Distributors() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 })
   const [drawer, setDrawer] = useState(null) // { form, initial, errors, editingId }
   const [saving, setSaving] = useState(false)
+  /// What each firm owes, keyed by distributor id. Empty until it loads.
+  const [accounts, setAccounts] = useState({})
 
   // Managers and executives come from Users — the same list the user form uses.
   useEffect(() => {
     dispatch(fetchDistributors())
     dispatch(fetchUsers())
   }, [dispatch])
+
+  /**
+   * What each firm owes us — "कितना बकाया है, ये सब दिखाना पड़ेगा".
+   *
+   * Billed, less what came back on credit notes, less what they have actually
+   * paid. Only *approved* payments count, which is the Finance module's own
+   * rule and the reason this is asked of the server rather than added up here.
+   *
+   * A firm with no bills has no row, which reads as nothing owed.
+   */
+  useEffect(() => {
+    let alive = true
+    paymentsService
+      .accounts()
+      .then((rows) => alive && setAccounts(Object.fromEntries(rows.map((row) => [row.distributorId, row]))))
+      .catch(() => alive && setAccounts({}))
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const managerOptions = useMemo(
     () => users.filter((u) => u.role === 'MANAGER').map((u) => ({ value: u.id, label: u.name })),
@@ -226,6 +250,38 @@ export default function Distributors() {
             </div>
           ),
         }),
+        helper.accessor((d) => accounts[d.id]?.outstanding ?? 0, {
+          id: 'outstanding',
+          header: 'Outstanding',
+          meta: { align: 'right' },
+          cell: ({ row }) => {
+            const account = accounts[row.original.id]
+            if (!account) return <span className="text-ink-muted">—</span>
+
+            // Owing us money is the ordinary case and reads plainly. A credit
+            // balance means we owe them — returns worth more than their bills
+            // — and has to look different, or it reads as a debt.
+            const owed = account.outstanding
+            return (
+              <div className="whitespace-nowrap">
+                <p
+                  title={`Billed ${formatINR(account.billed)} · credit notes ${formatINR(account.credited)} · received ${formatINR(account.received)}`}
+                  className={cn(
+                    'font-mono text-sm font-semibold tabular-nums',
+                    owed > 0 ? 'text-black' : owed < 0 ? 'text-green-deep' : 'text-ink-muted',
+                  )}
+                >
+                  {owed < 0 ? `${formatINR(Math.abs(owed))} cr` : formatINR(owed)}
+                </p>
+                {account.awaiting > 0 && (
+                  <p title="Recorded but not approved yet, so it has not come off" className="text-xs text-warning-ink">
+                    {formatINR(account.awaiting)} awaiting
+                  </p>
+                )}
+              </div>
+            )
+          },
+        }),
         helper.accessor((d) => d.locationName || (d.latitude === null ? '' : `${d.latitude}, ${d.longitude}`), {
           id: 'location',
           header: 'Location',
@@ -298,7 +354,7 @@ export default function Distributors() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [page.pageIndex, page.pageSize, distributors, cities, areas],
+    [page.pageIndex, page.pageSize, distributors, cities, areas, accounts],
   )
 
   return (

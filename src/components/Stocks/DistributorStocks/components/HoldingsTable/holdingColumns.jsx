@@ -3,6 +3,7 @@ import { Undo2 } from 'lucide-react'
 import { listFeatures } from '@/components/data/DataTable'
 import { RowActions } from '@/components/data/RowActions'
 import { StatusPill } from '@/components/data/StatusPill'
+import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { EXPIRY_TONE } from '../../../stockModel'
 
@@ -138,6 +139,49 @@ export function buildHoldingColumns({ onReturn, onEditOpening }) {
               {qty(row.original.held)}
             </span>
             <span className="text-xs text-ink-muted">{row.original.unit}</span>
+          </span>
+        )
+      },
+    }),
+    /**
+     * "कितने का माल पड़ा है" — quantity never answered that.
+     *
+     * The honest price is the one the goods actually went out at, off the last
+     * bill that carried them to this firm. Most stock reached a distributor
+     * through Stocks → Issue, where the bill number is typed by hand and is no
+     * bill of ours, so those fall back to what the firm buys at today. The
+     * rate underneath says which, because a valuation nobody can trace is
+     * worse than none.
+     */
+    helper.accessor('heldValue', {
+      header: 'Value',
+      meta: { align: 'right' },
+      cell: ({ row }) => {
+        const { heldValue, rate, rateSource } = row.original
+        if (heldValue === null || heldValue === undefined) {
+          return (
+            <span title="Nothing to price this at — no bill, and no rate column for this item" className="text-ink-muted">
+              —
+            </span>
+          )
+        }
+        const billed = rateSource === 'BILL'
+        return (
+          <span className="inline-flex flex-col items-end">
+            <span className="font-mono font-semibold tabular-nums text-black">{formatINR(heldValue)}</span>
+            {rate ? (
+              <span
+                title={
+                  billed
+                    ? 'The rate these goods actually went out at, from their bill'
+                    : 'No bill of ours carried this item to them, so this is their rate column today'
+                }
+                className={cn('text-xs', billed ? 'text-ink-muted' : 'text-warning-ink')}
+              >
+                @ {formatINR(rate)}
+                {billed ? '' : '*'}
+              </span>
+            ) : null}
           </span>
         )
       },

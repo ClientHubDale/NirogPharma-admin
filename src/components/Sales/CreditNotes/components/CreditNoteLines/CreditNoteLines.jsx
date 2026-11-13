@@ -1,7 +1,7 @@
 import { Trash2 } from 'lucide-react'
 import { SearchSelect } from '@/components/form/SearchSelect'
 import { cn } from '@/lib/utils'
-import { emptyLine } from '../../creditNoteModel'
+import { billForLine, emptyLine } from '../../creditNoteModel'
 
 /**
  * The items on a credit note, typed straight onto the sheet.
@@ -15,7 +15,7 @@ const FIELD =
 
 const money = (value) => (Number(value) || 0).toFixed(2)
 
-export function CreditNoteLines({ form, errors, items, holdings, priced, disabled, onChange }) {
+export function CreditNoteLines({ form, errors, items, holdings, bills = [], priced, disabled, onChange }) {
   const lines = form.lines
 
   const set = (index, key, value) =>
@@ -36,6 +36,17 @@ export function CreditNoteLines({ form, errors, items, holdings, priced, disable
   /** The batches this distributor still holds of that item. */
   const batchesFor = (itemId) => holdings.find((row) => row.itemId === itemId)?.batches ?? []
 
+  /**
+   * The bills named on this note that actually carried this item. Usually one,
+   * and then nothing needs choosing; two means the same goods went out twice
+   * at two prices — "एक ही आइटम दो बिल से आ सकता है, रेट अलग" — and the admin
+   * says which lot came back.
+   */
+  const billsFor = (itemId) =>
+    (form.againstInvoices ?? [])
+      .map((row) => bills.find((bill) => bill.id === row.invoiceId))
+      .filter((bill) => bill?.lines.some((row) => row.itemId === itemId))
+
   const itemOptions = items.map((item) => ({ value: item.id, label: item.name, hint: item.code }))
 
   return (
@@ -43,7 +54,7 @@ export function CreditNoteLines({ form, errors, items, holdings, priced, disable
       <table className="w-full border-collapse border-t border-black text-center text-[9px]">
         <thead>
           <tr>
-            {['S.NO', 'DESCRIPTION OF GOODS', 'BATCH', 'HSN', 'QTY.', 'UOM', 'RATE', 'TOTAL', 'TAXABLE VALUE', ''].map((head) => (
+            {['S.NO', 'DESCRIPTION OF GOODS', 'BATCH', 'FROM BILL', 'HSN', 'QTY.', 'UOM', 'RATE', 'TOTAL', 'TAXABLE VALUE', ''].map((head) => (
               <th key={head} className="border border-black px-1 py-[3px] font-bold">
                 {head}
               </th>
@@ -56,6 +67,8 @@ export function CreditNoteLines({ form, errors, items, holdings, priced, disable
             const figures = priced[index]
             const problem = Array.isArray(errors.lines) ? errors.lines[index] : null
             const batches = batchesFor(line.itemId)
+            const choices = billsFor(line.itemId)
+            const from = billForLine({ line, bills, againstInvoices: form.againstInvoices })
 
             return (
               <tr key={index}>
@@ -83,6 +96,30 @@ export function CreditNoteLines({ form, errors, items, holdings, priced, disable
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="border border-black px-1 py-[3px]">
+                  {choices.length ? (
+                    <select
+                      id={`line-${index}-bill`}
+                      aria-label={`Which bill line ${index + 1} came off`}
+                      value={line.againstInvoiceId}
+                      disabled={disabled || !item}
+                      onChange={(e) => set(index, 'againstInvoiceId', e.target.value)}
+                      className={FIELD}
+                    >
+                      {/* Blank is not "no bill": it is "whichever of the named
+                          bills carried this item", which is what the server
+                          does too. The option says so. */}
+                      <option value="">{from ? from.invoiceNo : 'Today’s rate'}</option>
+                      {choices.map((bill) => (
+                        <option key={bill.id} value={bill.id}>
+                          {bill.invoiceNo}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-ink-muted">{item ? 'Today’s rate' : ''}</span>
+                  )}
                 </td>
                 <td className="border border-black px-1 py-[3px] font-bold">{item?.hsn || ''}</td>
                 <td className="border border-black px-1 py-[3px]">

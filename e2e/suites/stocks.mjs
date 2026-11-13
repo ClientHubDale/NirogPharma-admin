@@ -256,6 +256,28 @@ has('…and the distributor it is coming back from', returnDrawer, distributor.n
 ok('the batch cannot be swapped for another', !(await page.$('#move-batch')))
 ok('nor the distributor', !(await page.$('#move-distributor')))
 
+/* ── the number the credit note goes out under ────────────────────────── */
+
+// The series hands out a number, and the admin can take it over: a return
+// raised against the office's own paper book has to carry that book's number.
+// The number is fetched when the drawer opens, so it arrives a moment after
+// the rest of the form — read the sheet again rather than the first snapshot.
+await page.waitForSelector('#move-note-no-edit', { timeout: 10000 }).catch(() => {})
+has('the drawer says which note the return will be raised under', await pageText(page), 'will be raised for this return')
+ok('…and offers a pencil to change it', await page.$('#move-note-no-edit'), 'no pencil on the credit note number')
+ok('but does not ask for the number unprompted', !(await page.$('#move-note-no')), 'the number is a field before the pencil is used')
+
+await page.click('#move-note-no-edit')
+await sleep(300)
+const offered = await page.$eval('#move-note-no', (el) => el.value)
+ok('the pencil opens the number, filled with the one offered', /^CN\//.test(offered), offered)
+ok('…and the pencil gives way to the field', !(await page.$('#move-note-no-edit')), 'the pencil is still there')
+
+await page.click('#move-note-no-auto')
+await sleep(300)
+ok('handing it back closes the field again', !(await page.$('#move-note-no')), 'the number field is still open')
+ok('…and the pencil returns', await page.$('#move-note-no-edit'), 'the pencil did not come back')
+
 // More than they hold is refused before it reaches the server.
 await page.type('#move-quantity', '90')
 await clickText(page, 'header button, footer button', 'Record return')
@@ -274,6 +296,11 @@ const backHeld = (await api('/stocks/distributors')).data.rows.find(
   (row) => row.distributorId === distributor.id && row.itemName === ITEM.name,
 )
 eq('they are left holding 25', backHeld?.held, 25)
+
+// Left alone, the number comes from the series — and a number typed in its
+// place is the one the note is raised under.
+const raisedNote = (await api('/credit-notes?limit=300')).data.notes.find((row) => row.itemName === ITEM.name)
+ok('the return was credited on the series number', /^CN\/\d{2}-\d{2}\//.test(raisedNote?.noteNo ?? ''), raisedNote?.noteNo)
 eq('the factory has 475 again', (await api('/stocks/batches')).data.batches.find((b) => b.batchNo === BATCH)?.available, 475)
 
 /* ── one bill, several batches ────────────────────────────────────────── */
@@ -397,16 +424,27 @@ ok('the batch figures are lighter than the item total', Number(weights.batch) < 
 await openRowMenu(`Actions for ${ITEM.name}`)
 await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-menu-item]')].find((el) => /all batches/i.test(el.textContent)).click())
 await page.waitForSelector('[role=dialog]')
-await sleep(900)
+// The dialog fetches the year's batches after it opens, so wait for a line to
+// land rather than for a fixed moment — the figures arrive when they arrive.
+await page
+  .waitForFunction(
+    (batchNo) => document.querySelector('[role=dialog]')?.innerText.includes(batchNo),
+    { timeout: 15000 },
+    BATCH,
+  )
+  .catch(() => {})
 const historyText = await page.$eval('[role=dialog]', (el) => el.innerText)
 has('the item history opens for the whole year', historyText, '1 April to 31 March')
 // The finished batch is off the main list, but the year's history still has it.
 has('and the finished batch is still in the history', historyText, BATCH)
 await page.keyboard.press('Escape')
-await sleep(500)
+// The dialog animates out, and the button behind it cannot be clicked through
+// the overlay — so wait for it to actually go.
+await page.waitForFunction(() => !document.querySelector('[role=dialog]'), { timeout: 10000 }).catch(() => {})
+await sleep(400)
 
 await page.click('button[aria-label^="Hide batches of E2E Stock Syrup"]')
-await sleep(700)
+await page.waitForFunction(() => !document.body.innerText.includes('E2E-B-200'), { timeout: 10000 }).catch(() => {})
 ok('closing the item puts the batches away again', !(await pageText(page)).includes('E2E-B-200'))
 
 /* ── expiry warns, it never blocks ────────────────────────────────────── */
@@ -475,7 +513,10 @@ const lit = await page.$$eval('tbody tr', (trs) =>
     distributor: tr.querySelectorAll('td')[0]?.innerText.split('\n')[0] ?? '',
     item: tr.querySelectorAll('td')[1]?.innerText.split('\n')[0] ?? '',
     dot: tr.querySelector('span[aria-label]')?.getAttribute('aria-label') ?? '',
-    lowBadge: Boolean(tr.querySelector('td:nth-last-child(2) .bg-danger-soft')),
+    // The low mark is the only danger-coloured thing inside a cell, so it is
+    // found by what it is rather than by which column it sits in — a new
+    // column has moved this assertion once already.
+    lowBadge: Boolean(tr.querySelector('td .bg-danger-soft')),
     expiredRow: tr.className.includes('bg-danger-soft'),
   })),
 )
@@ -689,4 +730,34 @@ await api('/stocks/return', {
   body: JSON.stringify({ batchId: anyBatch.id, distributorId: anyFirm.id, quantity: 5, invoiceNo: 'E2E/RET-CHECK' }),
 })
 
+
+/* ── the admin's own credit note number ───────────────────────────────── */
+
+// Done here, with nothing open on screen: these raise notes and then void
+// them, and a page left sitting on Distributor Stocks can refetch mid-delete.
+const MY_NUMBER = 'CN/E2E-BOOK/42'
+// By now the suite's own batch has been returned in full, so this takes any
+// holding that still has something in it rather than naming one.
+const anyHolding = (await api('/stocks/distributors')).data.rows.find((row) =>
+  (row.batches ?? []).some((batch) => batch.outstanding >= 2),
+)
+const anyHeldBatch = (anyHolding?.batches ?? []).find((batch) => batch.outstanding >= 2)
+const asReturn = {
+  batchId: anyHeldBatch?.batchId,
+  distributorId: anyHolding?.distributorId,
+  quantity: 1,
+  noteNo: MY_NUMBER,
+}
+const byHand = await api('/stocks/return', { method: 'POST', body: JSON.stringify(asReturn) })
+eq('a number typed by the admin is the one used', byHand.data?.batch?.creditNote?.noteNo, MY_NUMBER)
+
+const twice = await api('/stocks/return', { method: 'POST', body: JSON.stringify(asReturn) })
+ok('and the same number twice is refused in words', /already exists/i.test(twice.message ?? ''), twice.message)
+ok('…pointing at the field that is wrong', Boolean(twice.details?.noteNo), JSON.stringify(twice.details))
+
+// Both of those put stock back, so undo them before the figures are read on.
+for (const no of [MY_NUMBER]) {
+  const found = (await api('/credit-notes?limit=300')).data.notes.find((row) => row.noteNo === no)
+  if (found) await api(`/credit-notes/${found.id}`, { method: 'DELETE' })
+}
 await finish(browser, errors, { ignore: /status of (400|404|409)/ })

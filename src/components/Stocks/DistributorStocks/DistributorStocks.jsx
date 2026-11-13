@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/data/EmptyState'
 import { FormDrawer } from '@/components/data/FormDrawer'
 import { Notice } from '@/components/data/Notice'
 import { PageHeader } from '@/components/data/PageHeader'
+import { formatINR } from '@/lib/format'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { SearchSelect } from '@/components/form/SearchSelect'
@@ -33,7 +34,7 @@ import { currentPeriod, emptyMoveForm, fiscalYearOptions, FY_MONTHS, periodFor, 
 
 const PAGE_SIZE = 20
 
-const FIELD_IDS = { distributorId: 'move-distributor', batchId: 'move-batch', quantity: 'move-quantity', at: 'move-date' }
+const FIELD_IDS = { distributorId: 'move-distributor', batchId: 'move-batch', quantity: 'move-quantity', at: 'move-date', noteNo: 'move-note-no' }
 
 /**
  * What each distributor is holding — the same ledger as Factory Stocks, seen
@@ -84,6 +85,14 @@ export default function DistributorStocks() {
   const page = pagination.pageIndex < pageCount ? pagination : { ...pagination, pageIndex: 0 }
 
   const totalHeld = useMemo(() => filtered.reduce((sum, row) => sum + Number(row.held), 0), [filtered])
+  // What all that stock is worth, at the rate it went out at. Rows we never
+  // billed carry no rate and are simply left out of the sum.
+  const totalValue = useMemo(
+    () => filtered.reduce((sum, row) => sum + (Number(row.heldValue) || 0), 0),
+    [filtered],
+  )
+  /// How many rows are priced off the rate column rather than a real bill.
+  const starred = useMemo(() => filtered.filter((row) => row.rateSource === 'TIER').length, [filtered])
 
   const columns = useMemo(
     () => buildHoldingColumns({ onReturn: (row) => openReturn(row), onEditOpening: (row) => setOpening({ row, quantity: String(row.openingSeed ?? 0), note: row.openingNote ?? '', error: '' }) }),
@@ -190,7 +199,16 @@ export default function DistributorStocks() {
       <PageHeader
         title="Distributor Stocks"
         subtitle={`${filtered.length} ${filtered.length === 1 ? 'holding' : 'holdings'} · ${totalHeld.toLocaleString('en-IN')} in all`}
-      />
+      >
+        {totalValue > 0 && (
+          <span
+            id="holdings-value"
+            className="inline-flex h-11 items-center rounded-lg bg-mint-pale px-3.5 text-sm font-semibold text-forest"
+          >
+            Stock with them: <span className="ml-1.5 font-mono">{formatINR(totalValue)}</span>
+          </span>
+        )}
+      </PageHeader>
 
       {loadStatus === 'failed' && (
         <Notice tone="danger">
@@ -272,6 +290,15 @@ export default function DistributorStocks() {
               {label}
             </span>
           ))}
+          {/* Most stock reached a distributor through Stocks → Issue, where the
+              bill number is typed by hand and is no bill of ours. Those rows
+              are still worth pricing — just not at a rate we can prove. */}
+          {starred > 0 && (
+            <span id="holdings-rate-note" className="flex items-center gap-1.5">
+              <span className="font-mono text-warning-ink">*</span>
+              Priced at today&apos;s rate column — these never went out on a bill
+            </span>
+          )}
         </div>
 
         {loadStatus === 'loading' && !rows.length ? (

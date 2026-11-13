@@ -22,6 +22,19 @@ export const INVOICE_TOGGLES = [
   { key: 'showCreditPeriod', label: 'Credit Period', hint: 'Credit days, taken from the distributor' },
 ]
 
+/**
+ * A credit note is not a bill and does not carry the same boxes, so it keeps
+ * its own switches — "क्रेडिट नोट में भी सेटिंग होनी चाहिए जैसे इनवाइस में है".
+ */
+export const CREDIT_NOTE_TOGGLES = [
+  { key: 'showDebitNote', label: 'Debit Note No. & Date', hint: 'Their paper, raised when they sent the goods back' },
+  { key: 'showAgainstBill', label: 'Against Bill & Date', hint: 'The bills the goods first went out on' },
+  { key: 'showTransport', label: 'Transport', hint: 'Who brought the goods back' },
+  { key: 'showVehicleNo', label: 'Vehicle No.', hint: 'Show it on the note and on the printed copy' },
+  { key: 'showStation', label: 'Station', hint: 'Where the goods were booked from' },
+  { key: 'showOtherCharges', label: 'Other Charges', hint: 'The extra line in the summary, above Round Off' },
+]
+
 function CustomFields({ title, sign, values, onChange }) {
   const [adding, setAdding] = useState('')
   return (

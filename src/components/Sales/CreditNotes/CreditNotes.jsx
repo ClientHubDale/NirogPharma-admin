@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSelector } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
-import { Ban, Download, FileMinus2, FileText, Pencil, Plus, Send } from 'lucide-react'
+import { Ban, Download, FileMinus2, FileText, Pencil, Plus, Send, Settings } from 'lucide-react'
 import { DataTable, listFeatures } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
 import { Notice } from '@/components/data/Notice'
@@ -14,6 +14,11 @@ import { StatusPill } from '@/components/data/StatusPill'
 import { useToast } from '@/components/common/Toast'
 import { Button } from '@/components/ui/button'
 import { selectUser } from '@/store/authSlice'
+import {
+  CREDIT_NOTE_TOGGLES,
+  TransactionSettingsDialog,
+} from '@/components/Transactions/components/TransactionSettingsDialog'
+import { fetchSettings, saveSettingsGroup, selectCreditNoteSettings } from '@/store/settingsSlice'
 import { formatINR } from '@/lib/format'
 import { basePathFor, STATUS_LABEL, STATUS_TONE } from './creditNoteModel'
 import * as creditNotesService from '@/services/creditNotesService'
@@ -38,6 +43,15 @@ export default function CreditNotes() {
   const [search, setSearch] = useState('')
   const [page, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
   const toast = useToast()
+  const dispatch = useDispatch()
+  const noteRules = useSelector(selectCreditNoteSettings)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // The dialog edits what the server holds, so the screen reads it on load
+  // rather than show the defaults and save them over the real ones.
+  useEffect(() => {
+    dispatch(fetchSettings())
+  }, [dispatch])
   const navigate = useNavigate()
   const base = basePathFor(useLocation().pathname)
   const isOffice = useSelector(selectUser)?.role !== 'DISTRIBUTOR'
@@ -199,6 +213,15 @@ export default function CreditNotes() {
         title="Credit Notes"
         subtitle={`${filtered.length} ${filtered.length === 1 ? 'note' : 'notes'} · ${formatINR(owed)} owed back`}
       >
+        <Button
+          variant="outline"
+          size="icon-lg"
+          className="size-11"
+          aria-label="Credit note settings"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Settings className="size-4" />
+        </Button>
         <Button onClick={() => navigate(`${base}/new`)}>
           <Plus data-icon="inline-start" /> Create credit note
         </Button>
@@ -262,6 +285,27 @@ export default function CreditNotes() {
           />
         )}
       </section>
+
+      {/* The note's own switches, not the bill's. Turning one off takes the
+          field off the create screen and off the printed note both — but only
+          for notes written after it, since each note keeps the letterhead it
+          was written with. */}
+      <TransactionSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        settings={noteRules}
+        toggles={CREDIT_NOTE_TOGGLES}
+        extras={false}
+        noun="credit note"
+        onSave={async (next) => {
+          const result = await dispatch(saveSettingsGroup({ group: 'creditNote', patch: next }))
+          toast(
+            saveSettingsGroup.rejected.match(result)
+              ? { tone: 'danger', title: 'Could not save those settings.' }
+              : { tone: 'success', title: 'Saved — every new credit note follows it.' },
+          )
+        }}
+      />
     </div>
   )
 }

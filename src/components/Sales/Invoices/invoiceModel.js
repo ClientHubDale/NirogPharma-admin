@@ -46,6 +46,7 @@ export const emptyInvoiceForm = (defaults = {}) => ({
   packages: '',
   shipTo: '',
   proforma: false,
+  pastBill: false,
   note: '',
   terms: '',
   lines: [emptyLine()],
@@ -65,6 +66,7 @@ export const invoiceToForm = (invoice) => ({
   packages: invoice.packages === '' || invoice.packages == null ? '' : String(invoice.packages),
   shipTo: invoice.shipTo ?? '',
   proforma: Boolean(invoice.proforma),
+  pastBill: Boolean(invoice.pastBill),
   note: invoice.note ?? '',
   terms: invoice.terms ?? '',
   lines: invoice.lines.map((line) => ({
@@ -87,6 +89,7 @@ export const formToPayload = (form) => ({
   packages: form.packages.trim(),
   shipTo: form.shipTo.trim(),
   proforma: Boolean(form.proforma),
+  pastBill: Boolean(form.pastBill),
   note: form.note.trim(),
   terms: form.terms.trim(),
   lines: form.lines

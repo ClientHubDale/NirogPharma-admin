@@ -83,9 +83,14 @@ export function buildPaymentColumns({ onEdit, onSetStatus, onDelete }) {
       cell: ({ row }) => {
         const p = row.original
         const actions = [{ label: 'Edit', icon: Pencil, onSelect: () => onEdit(p) }]
-        PAYMENT_STATUSES.filter((s) => s.value !== p.status).forEach((s) =>
-          actions.push({ label: s.action, icon: TONE_ICONS[s.tone] ?? CircleDot, onSelect: () => onSetStatus(p, s.value) }),
-        )
+        // Approving is what makes money real, so a screen that does not hand
+        // over `onSetStatus` is saying this user may not decide — the actions
+        // are left off rather than offered and then refused.
+        if (onSetStatus) {
+          PAYMENT_STATUSES.filter((s) => s.value !== p.status).forEach((s) =>
+            actions.push({ label: s.action, icon: TONE_ICONS[s.tone] ?? CircleDot, onSelect: () => onSetStatus(p, s.value) }),
+          )
+        }
         actions.push({ label: 'Delete', icon: Trash2, onSelect: () => onDelete(p), destructive: true, separatorBefore: true })
         return <RowActions label={`Actions for ${p.number}`} actions={actions} />
       },

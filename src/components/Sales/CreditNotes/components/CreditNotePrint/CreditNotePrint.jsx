@@ -17,8 +17,16 @@ import { Cell, Head, Meta, money, pct, rupeesInWords } from '@/components/Sales/
  * into it through `slots`, so what is filled in is what comes out of the
  * printer.
  */
-export function CreditNotePrint({ note, bank, company: fromSettings, copy, heading, taxRate, slots = {} }) {
+export function CreditNotePrint({ note, bank, company: fromSettings, copy, heading, taxRate, show = {}, slots = {} }) {
   if (!note) return null
+
+  /**
+   * A field the company does not use should not sit empty on the paper —
+   * "यहाँ से ऑफ करके सेव कर दो तो पीडीएफ में भी नहीं दिखेगा". Anything the
+   * letterhead says nothing about stays on: a note written before these
+   * switches existed must print exactly as it always did.
+   */
+  const shows = (key) => show[key] !== false
 
   const company = { ...BILL_COMPANY, ...(fromSettings ?? {}) }
   const slot = (key, printed) => (key in slots ? slots[key] : printed)
@@ -58,6 +66,16 @@ export function CreditNotePrint({ note, bank, company: fromSettings, copy, headi
 
   const lines = note.lines ?? []
   const interState = Boolean(note.interState)
+
+  /**
+   * "NP/26-27/673 dt 12/11/2026, NP/26-27/675 dt 13/11/2026". A note written
+   * before this was a list carries only the plain text, which the API sends
+   * back as one row with no date — so that one still prints, bare.
+   */
+  const againstBills = (note.againstInvoices ?? [])
+    .map((row) => [row.no, row.date ? `dt ${billDate(row.date)}` : ''].filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join(', ')
 
   // The rate prints in its own column on a credit note rather than in the
   // header, but a note of one rate still reads that rate in the summary.
@@ -130,12 +148,21 @@ export function CreditNotePrint({ note, bank, company: fromSettings, copy, headi
             <Meta label="CR. NOTE NO.">{slot('noteNo', note.noteNo)}</Meta>
             <Meta label="CR. NOTE DATE">{slot('at', billDate(note.at))}</Meta>
             {/* Their paper, raised when they sent the goods back. */}
-            <Meta label="DEBIT NOTE NO.">{slot('debitNoteNo', note.debitNoteNo || '')}</Meta>
-            <Meta label="DEBIT NOTE DATE">{slot('debitNoteDate', billDate(note.debitNoteDate))}</Meta>
-            <Meta label="TRANSPORT">{slot('transport', note.transport || 'N.A.')}</Meta>
-            <Meta label="VEHICLE NO.">{slot('vehicleNo', note.vehicleNo || 'N.A.')}</Meta>
+            {shows('debitNote') && (
+              <>
+                <Meta label="DEBIT NOTE NO.">{slot('debitNoteNo', note.debitNoteNo || '')}</Meta>
+                <Meta label="DEBIT NOTE DATE">{slot('debitNoteDate', billDate(note.debitNoteDate))}</Meta>
+              </>
+            )}
+            {/* The bills the goods first went out on, each beside its own date
+                — goods from two bills can come back on one note. */}
+            {shows('againstBill') && (
+              <Meta label="AGAINST BILL & DATE">{slot('againstBill', againstBills || 'N.A.')}</Meta>
+            )}
+            {shows('transport') && <Meta label="TRANSPORT">{slot('transport', note.transport || 'N.A.')}</Meta>}
+            {shows('vehicleNo') && <Meta label="VEHICLE NO.">{slot('vehicleNo', note.vehicleNo || 'N.A.')}</Meta>}
             <Meta label="PLACE OF SUPPLY">{placeOfSupply(firm.state)}</Meta>
-            <Meta label="STATION">{slot('station', note.station || '')}</Meta>
+            {shows('station') && <Meta label="STATION">{slot('station', note.station || '')}</Meta>}
             {slot('extraMeta', null)}
           </section>
         </div>
@@ -277,7 +304,9 @@ export function CreditNotePrint({ note, bank, company: fromSettings, copy, headi
                 [`SGST @ ${one === null ? '' : pct(one / 2)} %`, interState ? '0.00' : money(note.sgst ?? totalTax - halfTax)],
                 ['IGST', interState ? money(note.igst ?? totalTax) : '0.00'],
                 // Their note prints NIL rather than 0.00 when nothing was added.
-                ['OTHER CHARGES', Number(note.otherCharges) ? money(note.otherCharges) : 'NIL'],
+                ...(shows('otherCharges')
+                  ? [['OTHER CHARGES', Number(note.otherCharges) ? money(note.otherCharges) : 'NIL']]
+                  : []),
                 ['ROUND OFF (+)', money(note.roundOff)],
               ].map(([label, value]) => (
                 <tr key={label}>

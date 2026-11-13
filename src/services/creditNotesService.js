@@ -23,6 +23,16 @@ export async function nextNoteNo(at) {
   return data.data.noteNo
 }
 
+/**
+ * The bills this distributor's goods went out on, newest first, each with what
+ * it charged per item. The "against bill" box offers these, and picking one is
+ * what credits the goods back at the rate they were sold at.
+ */
+export async function billsToCreditAgainst(distributorId) {
+  const { data } = await api.get('/credit-notes/against-bills', query({ distributorId }))
+  return data.data.bills
+}
+
 export async function createCreditNote(payload) {
   const { data } = await api.post('/credit-notes', payload)
   return data.data.note

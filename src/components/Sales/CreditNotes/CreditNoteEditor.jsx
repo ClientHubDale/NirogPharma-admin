@@ -16,14 +16,23 @@ import * as creditNotesService from '@/services/creditNotesService'
 import * as stockService from '@/services/stockService'
 import { selectUser } from '@/store/authSlice'
 import { fetchDistributors, selectDistributors } from '@/store/distributorsSlice'
-import { fetchSettings, saveSettingsGroup, selectBank, selectCompanySettings, selectInvoiceSettings } from '@/store/settingsSlice'
-import { BILL_COPIES } from '@/components/Sales/Invoices/components/InvoicePrint/billFormat'
+import {
+  fetchSettings,
+  saveSettingsGroup,
+  selectBank,
+  selectCompanySettings,
+  selectCreditNoteSettings,
+  selectInvoiceSettings,
+} from '@/store/settingsSlice'
+import { BILL_COPIES, billDate } from '@/components/Sales/Invoices/components/InvoicePrint/billFormat'
 import { letterheadFor } from '@/lib/letterhead'
 import { CreditNotePrint } from './components/CreditNotePrint'
 import { CreditNoteLines } from './components/CreditNoteLines'
 import {
   basePathFor,
+  billForLine,
   creditNoteToForm,
+  emptyAgainstBill,
   emptyCreditNoteForm,
   formToPayload,
   previewLine,
@@ -68,6 +77,7 @@ export default function CreditNoteEditor() {
   const bank = useSelector(selectBank)
   const companySettings = useSelector(selectCompanySettings)
   const rules = useSelector(selectInvoiceSettings)
+  const noteRules = useSelector(selectCreditNoteSettings)
   const items = useItems()
   const tiers = usePriceTiers()
 
@@ -83,6 +93,8 @@ export default function CreditNoteEditor() {
 
   // What this distributor is holding, which is what a line may credit back.
   const [holdings, setHoldings] = useState([])
+  /// The bills this firm's goods went out on, which set the rate they come back at.
+  const [bills, setBills] = useState([])
 
   // Template drawer, the same one the bill opens.
   const [template, setTemplate] = useState(null)
@@ -135,10 +147,64 @@ export default function CreditNoteEditor() {
     }
   }, [form.distributorId])
 
+  // And so do the bills the goods can have come back from — only this firm's,
+  // since another firm's bill has no business setting the rate on these goods.
+  useEffect(() => {
+    if (!form.distributorId) return setBills([])
+    let alive = true
+    creditNotesService
+      .billsToCreditAgainst(form.distributorId)
+      .then((rows) => alive && setBills(rows ?? []))
+      .catch(() => alive && setBills([]))
+    return () => {
+      alive = false
+    }
+  }, [form.distributorId])
+
   const update = (key, value) => {
     setForm((state) => ({ ...state, [key]: value }))
     setErrors((state) => ({ ...state, [key]: undefined }))
   }
+
+  /**
+   * The bills the goods came back against. Nothing is checked here: the client
+   * asked for free text, because goods billed before the system have a number
+   * nothing in it can match. Empty rows are dropped on the way to the API.
+   */
+  const updateAgainst = (index, key, value) =>
+    setForm((state) => ({
+      ...state,
+      againstInvoices: state.againstInvoices.map((row, i) => (i === index ? { ...row, [key]: value } : row)),
+    }))
+
+  /**
+   * Naming a bill we actually sent. The box offers this firm's own bills, and
+   * a number that matches one brings its date with it and, more to the point,
+   * its rates — which is the whole reason for picking rather than typing. A
+   * number that matches nothing is still kept: goods billed before the system
+   * have numbers nothing here can match.
+   */
+  const nameBill = (index, typed) =>
+    setForm((state) => {
+      const found = bills.find((bill) => bill.invoiceNo.toLowerCase() === typed.trim().toLowerCase())
+      return {
+        ...state,
+        againstInvoices: state.againstInvoices.map((row, i) =>
+          i === index
+            ? { no: typed, date: found ? found.invoiceDate : row.date, invoiceId: found ? found.id : '' }
+            : row,
+        ),
+      }
+    })
+
+  const addAgainst = () =>
+    setForm((state) => ({ ...state, againstInvoices: [...state.againstInvoices, emptyAgainstBill()] }))
+
+  const removeAgainst = (index) =>
+    setForm((state) => {
+      const left = state.againstInvoices.filter((_, i) => i !== index)
+      return { ...state, againstInvoices: left.length ? left : [emptyAgainstBill()] }
+    })
 
   const firm = distributors.find((row) => row.id === form.distributorId)
   const tier = firm?.priceTier ?? 'MRP'
@@ -148,10 +214,16 @@ export default function CreditNoteEditor() {
     () =>
       form.lines.map((line) =>
         line.itemId
-          ? previewLine({ item: items.find((row) => row.id === line.itemId), tier, tiers, quantity: line.quantity })
+          ? previewLine({
+              item: items.find((row) => row.id === line.itemId),
+              tier,
+              tiers,
+              quantity: line.quantity,
+              bill: billForLine({ line, bills, againstInvoices: form.againstInvoices }),
+            })
           : null,
       ),
-    [form.lines, items, tier, tiers],
+    [form.lines, form.againstInvoices, bills, items, tier, tiers],
   )
   const totals = useMemo(() => previewTotals(priced.filter(Boolean), form.otherCharges), [priced, form.otherCharges])
 
@@ -182,6 +254,7 @@ export default function CreditNoteEditor() {
       transport: form.transport,
       vehicleNo: form.vehicleNo,
       station: form.station,
+      againstInvoices: form.againstInvoices,
       // No cgst/sgst/igst here on purpose: the sheet splits the tax off the
       // lines itself, and a zero passed in would print as a zero.
       ...totals,
@@ -290,11 +363,11 @@ export default function CreditNoteEditor() {
    * A note that exists prints the letterhead it was written with; one still
    * being typed shows today's, which is what the next save will copy onto it.
    */
-  const paper = letterheadFor(reviewing && saved ? saved : null, {
-    company: companySettings,
-    bank,
-    invoice: rules,
-  })
+  const paper = letterheadFor(
+    reviewing && saved ? saved : null,
+    { company: companySettings, bank, invoice: rules, creditNote: noteRules },
+    'creditNote',
+  )
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -365,6 +438,7 @@ export default function CreditNoteEditor() {
           bank={paper.bank}
           company={paper.company}
           taxRate={paper.taxRate}
+          show={paper.show}
           slots={
             reviewing && saved
               ? { copyChoice: copyPicker }
@@ -459,22 +533,74 @@ export default function CreditNoteEditor() {
                       )}
                     </div>
                   ),
-                  extraMeta: (
-                    <div className="space-y-[1px] print:hidden">
-                      {/* The bill the goods first went out on. Recorded, not
-                          printed — their own note carries no such column. */}
-                      <div className="grid grid-cols-[7.5rem_0.5rem_1fr] gap-x-1">
-                        <span>AGAINST BILL</span>
-                        <span>:</span>
-                        <input
-                          id="note-against"
-                          aria-label="Against which bill"
-                          placeholder="NP/26-27/673"
-                          value={form.againstInvoiceNo}
-                          onChange={(e) => update('againstInvoiceNo', e.target.value)}
-                          className={FIELD}
-                        />
+                  /* The bills the goods first went out on. More than one is
+                     allowed — goods from two bills can come back together —
+                     and each prints beside its own date. */
+                  againstBill: (
+                    <div className="space-y-[2px]">
+                      {form.againstInvoices.map((row, index) => (
+                        <div key={index} className="grid grid-cols-[1fr_5.75rem_0.75rem] items-center gap-x-1">
+                          <input
+                            id={index === 0 ? 'note-against' : `note-against-${index}`}
+                            aria-label={index === 0 ? 'Against which bill' : `Against which bill, ${index + 1}`}
+                            placeholder="NP/26-27/673"
+                            list="note-against-bills"
+                            value={row.no}
+                            onChange={(e) => nameBill(index, e.target.value)}
+                            className={cn(FIELD, row.invoiceId && 'border-green-deep')}
+                          />
+                          <input
+                            id={index === 0 ? 'note-against-date' : `note-against-date-${index}`}
+                            type="date"
+                            aria-label={index === 0 ? 'That bill’s date' : `Bill ${index + 1}’s date`}
+                            value={row.date}
+                            onChange={(e) => updateAgainst(index, 'date', e.target.value)}
+                            className={FIELD}
+                          />
+                          {form.againstInvoices.length > 1 ? (
+                            <button
+                              type="button"
+                              id={`note-against-remove-${index}`}
+                              aria-label={`Remove bill ${index + 1}`}
+                              onClick={() => removeAgainst(index)}
+                              className="text-[10px] leading-none text-ink-muted hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          ) : (
+                            <span />
+                          )}
+                        </div>
+                      ))}
+                      {/* Our own bills to this firm. A datalist rather than a
+                          dropdown so a number from before the system can still
+                          be typed straight in. */}
+                      <datalist id="note-against-bills">
+                        {bills.map((bill) => (
+                          <option key={bill.id} value={bill.invoiceNo}>
+                            {billDate(bill.invoiceDate)} · {formatINR(bill.total)}
+                          </option>
+                        ))}
+                      </datalist>
+                      <div className="flex items-center justify-between gap-2 print:hidden">
+                        <button
+                          type="button"
+                          id="note-against-add"
+                          onClick={addAgainst}
+                          className="text-[8px] font-semibold text-green-deep underline"
+                        >
+                          + Another bill
+                        </button>
+                        {form.againstInvoices.some((row) => row.invoiceId) && (
+                          <span id="note-against-priced" className="text-[8px] text-green-deep">
+                            Rates taken from the bill
+                          </span>
+                        )}
                       </div>
+                    </div>
+                  ),
+                  extraMeta: paper.show.otherCharges === false ? null : (
+                    <div className="space-y-[1px] print:hidden">
                       <div className="grid grid-cols-[7.5rem_0.5rem_1fr] gap-x-1">
                         <span>OTHER CHARGES</span>
                         <span>:</span>
@@ -495,6 +621,7 @@ export default function CreditNoteEditor() {
                       errors={errors}
                       items={items}
                       holdings={holdings}
+                      bills={bills}
                       priced={priced}
                       disabled={issued}
                       onChange={update}

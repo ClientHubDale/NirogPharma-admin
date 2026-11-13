@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useParams, useSearchParams } from 'react-router-dom'
 import * as creditNotesService from '@/services/creditNotesService'
-import { fetchSettings, selectBank, selectCompanySettings, selectInvoiceSettings } from '@/store/settingsSlice'
+import {
+  fetchSettings,
+  selectBank,
+  selectCompanySettings,
+  selectCreditNoteSettings,
+  selectInvoiceSettings,
+} from '@/store/settingsSlice'
 import { COPY_LABEL } from '@/components/Sales/Invoices/components/InvoicePrint/billFormat'
 import { letterheadFor } from '@/lib/letterhead'
 import { CreditNotePrint } from './components/CreditNotePrint'
@@ -20,6 +26,7 @@ export default function CreditNotePrintPage() {
   const bank = useSelector(selectBank)
   const company = useSelector(selectCompanySettings)
   const rules = useSelector(selectInvoiceSettings)
+  const noteRules = useSelector(selectCreditNoteSettings)
 
   const [note, setNote] = useState(null)
   const [error, setError] = useState(null)
@@ -72,13 +79,20 @@ export default function CreditNotePrintPage() {
 
   // The note prints what it was written with, so a new logo or a changed bank
   // account leaves notes already made alone.
-  const paper = letterheadFor(note, { company, bank, invoice: rules })
+  const paper = letterheadFor(note, { company, bank, invoice: rules, creditNote: noteRules }, 'creditNote')
 
   return (
     <div className="min-h-screen bg-bg py-6 print:bg-white print:py-0">
       {copies.map((copy, index) => (
         <div key={copy} className={index > 0 ? 'mt-8 break-before-page print:mt-0' : undefined}>
-          <CreditNotePrint note={note} bank={paper.bank} company={paper.company} taxRate={paper.taxRate} copy={copy} />
+          <CreditNotePrint
+            note={note}
+            bank={paper.bank}
+            company={paper.company}
+            taxRate={paper.taxRate}
+            show={paper.show}
+            copy={copy}
+          />
         </div>
       ))}
     </div>

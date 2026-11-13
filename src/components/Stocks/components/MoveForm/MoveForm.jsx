@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Pencil } from 'lucide-react'
 import { FormSection } from '@/components/form/FormSection'
 import { SelectField } from '@/components/form/SelectField'
 import { TextAreaField } from '@/components/form/TextAreaField'
@@ -28,6 +30,13 @@ function Fixed({ label, value, className = '' }) {
  * batch it came out on, never a fresh one. They are shown, not asked.
  */
 export function MoveForm({ form, errors, distributors, batches, available, unit, onChange, direction = 'OUT', holding, batchesHeld = [], nextNoteNo }) {
+  /**
+   * The note number is handed out by the series unless the admin takes it
+   * over. Blank means "give me the next one", so typing a number is a decision
+   * he has to make deliberately — hence the pencil rather than an open field.
+   */
+  const [ownNumber, setOwnNumber] = useState(false)
+
   const set = (field) => (e) => onChange(field, e.target.value)
   const number = (field) => (e) => onChange(field, e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))
 
@@ -68,14 +77,54 @@ export function MoveForm({ form, errors, distributors, batches, available, unit,
       />
 
       {/* "इनवाइस नंबर नया जनरेट होना चाहिए" — the number this return will be
-          credited under, so the admin sees it before confirming. */}
-      {!out && nextNoteNo && (
-        <p className="rounded-xl border border-mint-pale bg-mint-pale/40 px-3.5 py-2.5 text-sm sm:col-span-2">
-          <span className="text-ink-muted">Credit note </span>
-          <span className="font-mono font-bold text-black">{nextNoteNo}</span>
-          <span className="text-ink-muted"> will be raised for this return.</span>
+          credited under, so the admin sees it before confirming. The pencil
+          hands it over to him: a note raised against a paper book the office
+          already keeps has to carry that book's number, not ours. */}
+      {!out && (ownNumber ? (
+        <div className="sm:col-span-2">
+          <TextField
+            id="move-note-no"
+            label="Credit note number"
+            size="md"
+            placeholder={nextNoteNo || 'CN/26-27/001'}
+            value={form.noteNo}
+            onChange={set('noteNo')}
+            error={errors.noteNo}
+          />
+          <button
+            type="button"
+            id="move-note-no-auto"
+            onClick={() => {
+              setOwnNumber(false)
+              onChange('noteNo', '')
+            }}
+            className="mt-2 text-xs font-semibold text-green-deep underline underline-offset-2 hover:text-black"
+          >
+            {nextNoteNo ? `Use ${nextNoteNo} instead` : 'Use the next number instead'}
+          </button>
+        </div>
+      ) : nextNoteNo ? (
+        <p className="flex items-center gap-2 rounded-xl border border-mint-pale bg-mint-pale/40 px-3.5 py-2.5 text-sm sm:col-span-2">
+          <span className="min-w-0 flex-1">
+            <span className="text-ink-muted">Credit note </span>
+            <span className="font-mono font-bold text-black">{nextNoteNo}</span>
+            <span className="text-ink-muted"> will be raised for this return.</span>
+          </span>
+          <button
+            type="button"
+            id="move-note-no-edit"
+            aria-label="Change the credit note number"
+            title="Change the credit note number"
+            onClick={() => {
+              setOwnNumber(true)
+              onChange('noteNo', nextNoteNo)
+            }}
+            className="grid size-7 shrink-0 place-items-center rounded-lg border border-mint-pale bg-white text-ink-muted hover:bg-bg hover:text-green-deep"
+          >
+            <Pencil className="size-3.5" />
+          </button>
         </p>
-      )}
+      ) : null)}
 
       <TextAreaField
         id="move-note"

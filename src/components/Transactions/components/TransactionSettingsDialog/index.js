@@ -1,1 +1,1 @@
-export { INVOICE_TOGGLES, TransactionSettingsDialog } from './TransactionSettingsDialog'
+export { CREDIT_NOTE_TOGGLES, INVOICE_TOGGLES, TransactionSettingsDialog } from './TransactionSettingsDialog'

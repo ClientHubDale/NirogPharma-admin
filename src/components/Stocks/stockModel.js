@@ -129,6 +129,9 @@ export const emptyMoveForm = (defaults = {}) => ({
   batchId: '',
   quantity: '',
   invoiceNo: '',
+  /// The credit note this return goes out under. Blank means the series hands
+  /// out the next one; filled, it is the admin's own number.
+  noteNo: '',
   at: today(),
   note: '',
   ...defaults,
@@ -188,6 +191,12 @@ export function validateMoveForm(form, available) {
   else if (available !== undefined && Number(form.quantity) > available) errors.quantity = `Only ${available} available.`
 
   if (form.at && form.at > today()) errors.at = 'Can’t be in the future.'
+
+  // Only checked when the admin took the number over: left alone, the field is
+  // blank on purpose and the series fills it in.
+  if (form.noteNo !== undefined && form.noteNo !== '' && !form.noteNo.trim()) {
+    errors.noteNo = 'Enter the credit note number.'
+  }
 
   return errors
 }

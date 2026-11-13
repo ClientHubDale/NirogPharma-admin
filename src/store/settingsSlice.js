@@ -31,6 +31,17 @@ const initialState = {
   // What a bill must carry before it can be issued, and the terms printed on
   // it. The server owns these — the invoice screen reads them on every load.
   invoice: { vehicleNoRequired: false, ewayBillRequired: false, ewayBillThreshold: 50000, terms: '' },
+  // Which fields the credit note carries. A bill and a credit note are not the
+  // same paper, so the note keeps its own switches rather than borrow the
+  // bill's — switched off, a field leaves the create screen and the PDF both.
+  creditNote: {
+    showDebitNote: true,
+    showAgainstBill: true,
+    showTransport: true,
+    showVehicleNo: true,
+    showStation: true,
+    showOtherCharges: true,
+  },
   // When a stock figure should start shouting, and after how long unsold stock
   // counts as slow. The server colours by these; the screens explain them.
   stock: { lowFactory: 100, lowDistributor: 10, slowMovingDays: 15 },
@@ -96,6 +107,7 @@ const settingsSlice = createSlice({
         state.error = null
         if (payload.bank) state.bank = { ...state.bank, ...payload.bank }
         if (payload.invoice) state.invoice = { ...state.invoice, ...payload.invoice }
+        if (payload.creditNote) state.creditNote = { ...state.creditNote, ...payload.creditNote }
         if (payload.stock) state.stock = { ...state.stock, ...payload.stock }
         // The letterhead the bill prints, saved on the server.
         if (payload.company) state.billCompany = { ...(state.billCompany ?? {}), ...payload.company }
@@ -122,6 +134,8 @@ export const selectBank = (state) => state.settings.bank
 export const selectMobileApp = (state) => state.settings.mobileApp
 /** What a bill must carry, and the terms printed under it. */
 export const selectInvoiceSettings = (state) => state.settings.invoice
+/** Which fields the credit note shows, on screen and on the PDF. */
+export const selectCreditNoteSettings = (state) => state.settings.creditNote
 /** When a stock figure turns orange or red. */
 export const selectStockSettings = (state) => state.settings.stock
 /** The letterhead the printed bill carries. */

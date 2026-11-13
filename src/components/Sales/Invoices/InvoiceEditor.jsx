@@ -235,6 +235,31 @@ export default function InvoiceEditor() {
     </select>
   );
 
+  /**
+   * A bill from before the system.
+   *
+   * The client holds the paper copies of what went out before any of this
+   * existed and types them in so the money owed is right — "जैसे नया जनरेट हो
+   * रहा है, वैसे पुराना भी". Those goods left months ago, so this bill must
+   * not move any stock: it needs no batches, and issuing it only puts the
+   * money on the books. The real stock position is entered on its own screens.
+   */
+  const pastBillTick = issued ? null : (
+    <label
+      htmlFor="invoice-past-bill"
+      className="mt-0.5 flex items-center gap-1 text-[9px] text-ink-muted print:hidden"
+    >
+      <input
+        id="invoice-past-bill"
+        type="checkbox"
+        checked={Boolean(form.pastBill)}
+        onChange={(e) => update("pastBill", e.target.checked)}
+        className="size-3 accent-green-deep"
+      />
+      Old bill — goods already delivered
+    </label>
+  );
+
   /** Only batches of that item, and only ones with something in them. */
   const batchesFor = (itemId) =>
     batches.filter((batch) => batch.itemId === itemId && batch.available > 0);
@@ -268,6 +293,7 @@ export default function InvoiceEditor() {
     priceTier: firm?.priceTier ?? "",
     shipTo: form.shipTo,
     proforma: form.proforma,
+    pastBill: form.pastBill,
     interState,
     distributor: firm ?? {},
     dueDate: saved?.dueDate ?? "",
@@ -528,7 +554,12 @@ export default function InvoiceEditor() {
               ewayBillNo: rules.showEwayBill !== false,
             }}
             slots={{
-              copyChoice: copyPicker,
+              copyChoice: (
+                <>
+                  {copyPicker}
+                  {pastBillTick}
+                </>
+              ),
               invoiceNo: (
                 <input
                   id="invoice-no"
