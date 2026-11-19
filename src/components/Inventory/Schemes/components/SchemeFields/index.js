@@ -1,1 +1,1 @@
-export { AmountFields, BuyXGetYFields, TieredFields } from './SchemeFields'
+export { RewardFields, TriggerFields } from './SchemeFields'

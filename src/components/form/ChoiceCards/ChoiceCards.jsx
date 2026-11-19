@@ -2,12 +2,17 @@ import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
- * Big selectable cards (radio group) — e.g. the scheme type picker.
+ * Big selectable cards (radio group) — e.g. the scheme's trigger and reward.
  * options: [{ value, title, description, icon? }]
+ *
+ * The grid follows how many choices there are rather than assuming three: two
+ * cards squeezed into three columns wrap every word onto its own line.
  */
+const COLUMNS = { 1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-4' }
+
 export function ChoiceCards({ value, onChange, options, label, disabled }) {
   return (
-    <div role="radiogroup" aria-label={label} className="grid gap-3 md:grid-cols-3">
+    <div role="radiogroup" aria-label={label} className={cn('grid gap-3', COLUMNS[options.length] ?? 'md:grid-cols-3')}>
       {options.map(({ value: v, title, description, icon: Icon }) => {
         const selected = v === value
         return (

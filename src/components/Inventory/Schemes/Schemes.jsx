@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, TicketPercent } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useGifts } from '@/hooks/useGifts'
 import { useItems } from '@/hooks/useItems'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ColumnSettings } from '@/components/data/ColumnSettings'
@@ -11,7 +12,7 @@ import { PageHeader } from '@/components/data/PageHeader'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { SearchSelect } from '@/components/form/SearchSelect'
-import { SCHEME_STATUS_OPTIONS, SCHEME_TYPE_OPTIONS } from '@/components/Inventory/Schemes/schemeModel'
+import { kindOf, SCHEME_KIND_OPTIONS, SCHEME_STATUS_OPTIONS } from '@/components/Inventory/Schemes/schemeModel'
 import { buildSchemeColumns, SCHEME_COLUMN_OPTIONS } from '@/components/Inventory/Schemes/components/SchemesTable'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,13 +32,15 @@ export default function Schemes() {
   const location = useLocation()
   const schemes = useSelector(selectSchemes)
   const items = useItems()
+  const gifts = useGifts()
   const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items])
+  const giftsById = useMemo(() => Object.fromEntries(gifts.map((g) => [g.id, g])), [gifts])
 
   const [search, setSearch] = useState('')
   const [type, setType] = useState('')
   const [status, setStatus] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: PAGE_SIZE })
-  const [columnVisibility, setColumnVisibility] = useState({ priority: false })
+  const [columnVisibility, setColumnVisibility] = useState({})
   // A notice / highlight handed over by the editor after Save.
   const [notice, setNotice] = useState(location.state?.notice ?? null)
   const [highlightId] = useState(location.state?.highlightId ?? null)
@@ -50,7 +53,7 @@ export default function Schemes() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return schemes.filter(
-      (s) => (!q || s.name.toLowerCase().includes(q)) && (!type || s.type === type) && (!status || s.status === status),
+      (s) => (!q || s.name.toLowerCase().includes(q)) && (!type || kindOf(s) === type) && (!status || s.status === status),
     )
   }, [schemes, search, type, status])
 
@@ -63,6 +66,7 @@ export default function Schemes() {
     () =>
       buildSchemeColumns({
         itemsById,
+        giftsById,
         onEdit: (s) => navigate(`${BASE}/${s.id}/edit`),
         onDuplicate: (s) => navigate(`${BASE}/new`, { state: { duplicateOf: s.id } }),
         onToggleStatus: (s) => {
@@ -82,7 +86,7 @@ export default function Schemes() {
           })
         },
       }),
-    [itemsById, navigate, dispatch, schemes],
+    [itemsById, giftsById, navigate, dispatch, schemes],
   )
 
   const empty = (
@@ -149,10 +153,10 @@ export default function Schemes() {
           />
           <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:max-w-lg">
             <SearchSelect
-              aria-label="Filter by type"
-              placeholder="Select type"
+              aria-label="Filter by kind"
+              placeholder="Earns → Gives"
               clearable
-              options={SCHEME_TYPE_OPTIONS}
+              options={SCHEME_KIND_OPTIONS}
               value={type}
               onChange={(v) => {
                 setType(v)
@@ -193,6 +197,7 @@ export default function Schemes() {
           empty={empty}
         />
       </section>
+
     </div>
   )
 }

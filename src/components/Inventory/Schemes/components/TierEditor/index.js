@@ -1,1 +1,0 @@
-export { TierEditor } from './TierEditor'

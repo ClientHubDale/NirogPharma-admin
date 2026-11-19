@@ -3,42 +3,53 @@ import { CircleCheck, CircleDashed, Copy, Pencil, Trash2 } from 'lucide-react'
 import { listFeatures } from '@/components/data/DataTable'
 import { RowActions } from '@/components/data/RowActions'
 import { StatusPill } from '@/components/data/StatusPill'
-import { PARTY_GROUPS } from '@/mocks/parties'
-import { describeScheme, formatDisplayDate, SCHEME_TYPES, schemeState } from '../../schemeModel'
+import {
+  describeScheme,
+  formatDisplayDate,
+  kindOf,
+  SCHEME_KIND_LABEL,
+  SCHEME_REWARDS,
+  SCHEME_TRIGGERS,
+  schemeState,
+} from '../../schemeModel'
 
 const helper = createColumnHelper(listFeatures)
-const TYPE = Object.fromEntries(SCHEME_TYPES.map((t) => [t.value, t]))
-const GROUP = Object.fromEntries(PARTY_GROUPS.map((g) => [g.value, g.label]))
+const TRIGGER = Object.fromEntries(SCHEME_TRIGGERS.map((t) => [t.value, t]))
+const REWARD = Object.fromEntries(SCHEME_REWARDS.map((r) => [r.value, r]))
 
-export function buildSchemeColumns({ itemsById, onEdit, onToggleStatus, onDuplicate, onDelete }) {
+export function buildSchemeColumns({ itemsById, giftsById = {}, onEdit, onToggleStatus, onDuplicate, onDelete }) {
   return helper.columns([
     helper.accessor('name', {
       header: 'Name',
       cell: ({ row }) => (
         <div className="min-w-[16rem]">
           <p className="font-semibold text-black">{row.original.name}</p>
-          <p className="mt-0.5 text-xs text-ink-muted">{describeScheme(row.original, itemsById)}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{describeScheme(row.original, itemsById, giftsById)}</p>
         </div>
       ),
     }),
-    helper.accessor('type', {
-      header: 'Type',
-      cell: (info) => {
-        const t = TYPE[info.getValue()]
-        const Icon = t.icon
+    // What earns it and what it gives, which is the whole of what a scheme
+    // is — shown as the pair rather than as a type nobody chose.
+    helper.accessor((scheme) => kindOf(scheme), {
+      id: 'type',
+      header: 'Earns → Gives',
+      cell: ({ row }) => {
+        const scheme = row.original
+        const Trigger = TRIGGER[scheme.trigger]?.icon
+        const Reward = REWARD[scheme.reward]?.icon
         return (
           <span className="inline-flex items-center gap-2 whitespace-nowrap text-ink">
             <span className="grid size-7 place-items-center rounded-md bg-mint-pale text-forest">
-              <Icon className="size-3.5" />
+              {Trigger && <Trigger className="size-3.5" />}
             </span>
-            {t.title}
+            <span className="text-ink-muted">→</span>
+            <span className="grid size-7 place-items-center rounded-md bg-mint-pale text-forest">
+              {Reward && <Reward className="size-3.5" />}
+            </span>
+            {SCHEME_KIND_LABEL[kindOf(scheme)] ?? '—'}
           </span>
         )
       },
-    }),
-    helper.accessor('partyGroup', {
-      header: 'Party group',
-      cell: (info) => <span className="whitespace-nowrap">{GROUP[info.getValue()] ?? '—'}</span>,
     }),
     helper.accessor('startDate', {
       header: 'Validity period',
@@ -47,11 +58,6 @@ export function buildSchemeColumns({ itemsById, onEdit, onToggleStatus, onDuplic
           {formatDisplayDate(row.original.startDate)} → {formatDisplayDate(row.original.endDate)}
         </span>
       ),
-    }),
-    helper.accessor('priority', {
-      header: 'Priority',
-      meta: { align: 'center' },
-      cell: (info) => <span className="font-mono">{info.getValue()}</span>,
     }),
     helper.accessor('status', {
       header: 'Status',
@@ -91,9 +97,7 @@ export function buildSchemeColumns({ itemsById, onEdit, onToggleStatus, onDuplic
 
 export const SCHEME_COLUMN_OPTIONS = [
   { id: 'name', label: 'Name', required: true },
-  { id: 'type', label: 'Type' },
-  { id: 'partyGroup', label: 'Party group' },
+  { id: 'type', label: 'Earns → Gives' },
   { id: 'startDate', label: 'Validity period' },
-  { id: 'priority', label: 'Priority' },
   { id: 'status', label: 'Status', required: true },
 ]

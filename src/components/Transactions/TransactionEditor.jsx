@@ -25,6 +25,7 @@ import { SchemeResultDialog } from './components/SchemeResultDialog'
 import { TotalsSummary } from './components/TotalsSummary'
 import { DOC_TYPES, titleCase } from './docTypes'
 import { SALES_USER_OPTIONS } from './salesUsers'
+import { useGifts } from '@/hooks/useGifts'
 import { applySchemes } from './schemeEngine'
 import { docTotals, lineFor, nextDocNumber, validateDoc } from './transactionModel'
 
@@ -111,6 +112,9 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
   const partyList = purchase || doc?.partyType === 'SUPPLIER' ? suppliers : customers
   const party = useMemo(() => [...customers, ...suppliers].find((p) => p.id === doc?.partyId), [customers, suppliers, doc?.partyId])
   const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items])
+  // Giveaways — a pen, a bag — which a scheme can hand over but nobody sells.
+  const gifts = useGifts()
+  const giftsById = useMemo(() => Object.fromEntries(gifts.map((g) => [g.id, g])), [gifts])
   const cityOf = useMemo(() => {
     const cityById = Object.fromEntries(cities.map((c) => [c.id, c.name]))
     const routeCity = Object.fromEntries(routes.map((r) => [r.id, cityById[r.cityId]]))
@@ -161,7 +165,7 @@ export default function TransactionEditor({ type, docId, duplicateOf, convertFro
       setErrors((e) => ({ ...e, partyId: 'Choose the party first — schemes depend on its group.' }))
       return
     }
-    const res = applySchemes({ lines: doc.lines, schemes, date: doc.date, party, itemsById, newKey })
+    const res = applySchemes({ lines: doc.lines, schemes, date: doc.date, party, itemsById, giftsById, newKey })
     setDoc((d) => ({ ...d, lines: res.lines, schemeDiscount: res.schemeDiscount }))
     setAppliedSig(signature(res.lines))
     setSchemeResult(res)
