@@ -1,0 +1,32 @@
+name: Deploy admin panel to Hostinger
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # adds a "Run workflow" button in the Actions tab
+
+concurrency:
+  group: deploy-admin-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          # Strip stray spaces / new lines / quotes that sneak in when pasting secrets.
+          HOST=$(printf '%s' "$SSH_HOST" | tr -d "[:space:]\"'")
+          if [ -z "$HOST" ]; then echo "SSH_HOST secret is empty"; exit 1; fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+          # The server only lets this key run the admin deploy script
+          # (pull, install, build, swap in). It fails the job if the build fails.
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes root@"$HOST"
