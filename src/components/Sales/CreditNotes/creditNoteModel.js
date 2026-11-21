@@ -50,6 +50,8 @@ export const emptyCreditNoteForm = (defaults = {}) => ({
   station: '',
   againstInvoices: [emptyAgainstBill()],
   otherCharges: '',
+  /// What the bill gave free that is NOT coming back, in rupees.
+  schemeKept: '',
   note: '',
   lines: [emptyLine()],
   ...defaults,
@@ -70,6 +72,7 @@ export const creditNoteToForm = (note) => ({
     ? note.againstInvoices.map((row) => ({ no: row.no ?? '', date: row.date ?? '', invoiceId: row.invoiceId ?? '' }))
     : [emptyAgainstBill()],
   otherCharges: Number(note.otherCharges) ? String(note.otherCharges) : '',
+  schemeKept: Number(note.schemeKept) ? String(note.schemeKept) : '',
   note: note.note ?? '',
   lines: (note.lines ?? []).map((line) => ({
     itemId: line.itemId,
@@ -96,6 +99,7 @@ export const formToPayload = (form) => ({
     .map((row) => ({ no: row.no.trim(), date: row.date, invoiceId: row.invoiceId }))
     .filter((row) => row.no || row.date),
   otherCharges: Number(form.otherCharges) || 0,
+  schemeKept: Number(form.schemeKept) || 0,
   note: form.note.trim(),
   lines: form.lines
     .filter((line) => line.itemId)
@@ -162,17 +166,20 @@ export function previewLine({ item, tier, tiers, quantity, bill }) {
 }
 
 /** The note's own total, rounded to the rupee the way the server rounds it. */
-export function previewTotals(lines, otherCharges = 0) {
+export function previewTotals(lines, otherCharges = 0, schemeKept = 0) {
   const taxablePaise = lines.reduce((sum, line) => sum + Math.round((line?.taxableValue ?? 0) * 100), 0)
   const taxPaise = lines.reduce((sum, line) => sum + Math.round((line?.taxAmount ?? 0) * 100), 0)
   const otherPaise = Math.round((Number(otherCharges) || 0) * 100)
-  const beforePaise = taxablePaise + taxPaise + otherPaise
+  // Free goods kept back were never paid for, so they cannot be credited.
+  const keptPaise = Math.round((Number(schemeKept) || 0) * 100)
+  const beforePaise = taxablePaise + taxPaise + otherPaise - keptPaise
   const roundedPaise = Math.round(beforePaise / 100) * 100
 
   return {
     taxableValue: taxablePaise / 100,
     taxAmount: taxPaise / 100,
     otherCharges: otherPaise / 100,
+    schemeKept: keptPaise / 100,
     roundOff: (roundedPaise - beforePaise) / 100,
     total: roundedPaise / 100,
   }

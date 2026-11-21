@@ -225,7 +225,24 @@ export default function CreditNoteEditor() {
       ),
     [form.lines, form.againstInvoices, bills, items, tier, tiers],
   )
-  const totals = useMemo(() => previewTotals(priced.filter(Boolean), form.otherCharges), [priced, form.otherCharges])
+  const totals = useMemo(
+    () => previewTotals(priced.filter(Boolean), form.otherCharges, form.schemeKept),
+    [priced, form.otherCharges, form.schemeKept],
+  )
+
+  /**
+   * What the bills named on this note handed over free.
+   *
+   * Goods going back should bring their scheme with them; anything the
+   * distributor keeps was never paid for, so it cannot be credited either —
+   * its worth comes off the note instead.
+   */
+  const freeOnBills = useMemo(() => {
+    const named = new Set((form.againstInvoices ?? []).map((row) => row.invoiceId).filter(Boolean))
+    return bills
+      .filter((bill) => named.has(bill.id))
+      .flatMap((bill) => (bill.freebies ?? []).map((row) => ({ ...row, invoiceNo: bill.invoiceNo })))
+  }, [bills, form.againstInvoices])
 
   /** How much of a batch they are still holding, for the line's own check. */
   const heldOf = (batchId) => {
@@ -255,6 +272,7 @@ export default function CreditNoteEditor() {
       vehicleNo: form.vehicleNo,
       station: form.station,
       againstInvoices: form.againstInvoices,
+      schemeKept: Number(form.schemeKept) || 0,
       // No cgst/sgst/igst here on purpose: the sheet splits the tax off the
       // lines itself, and a zero passed in would print as a zero.
       ...totals,
@@ -599,8 +617,25 @@ export default function CreditNoteEditor() {
                       </div>
                     </div>
                   ),
+                  schemeKept: freeOnBills.length ? (
+                    <input
+                      id="note-scheme-kept"
+                      aria-label="Value of free goods they are keeping"
+                      inputMode="decimal"
+                      value={form.schemeKept}
+                      onChange={(e) => update('schemeKept', e.target.value.replace(/[^\d.]/g, ''))}
+                      className={FIELD}
+                    />
+                  ) : null,
                   extraMeta: paper.show.otherCharges === false ? null : (
                     <div className="space-y-[1px] print:hidden">
+                      {freeOnBills.length > 0 && (
+                        <p className="text-[8px] leading-tight text-warning-ink">
+                          Free on {freeOnBills.map((row) => row.invoiceNo).filter((v, i, a) => a.indexOf(v) === i).join(', ')}:{' '}
+                          {freeOnBills.map((row) => `${row.quantity} ${row.unit} ${row.name}`.replace(/\s+/g, ' ')).join(', ')}. Put
+                          what they keep in SCHEME KEPT — it comes off the credit.
+                        </p>
+                      )}
                       <div className="grid grid-cols-[7.5rem_0.5rem_1fr] gap-x-1">
                         <span>OTHER CHARGES</span>
                         <span>:</span>

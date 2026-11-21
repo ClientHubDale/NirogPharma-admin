@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, Pencil, Printer, Send } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -9,6 +9,7 @@ import { useToast } from "@/components/common/Toast";
 import { cn } from "@/lib/utils";
 import { SearchSelect } from "@/components/form/SearchSelect";
 import { Button } from "@/components/ui/button";
+import { useGifts } from "@/hooks/useGifts";
 import { useItems } from "@/hooks/useItems";
 import { formatINR } from "@/lib/format";
 import * as invoicesService from "@/services/invoicesService";
@@ -27,6 +28,10 @@ import {
 import { fetchBatches, selectBatches } from "@/store/stockSlice";
 import { usePriceTiers } from "@/hooks/usePriceTiers";
 import { InvoiceLines } from "./components/InvoiceLines";
+import { SchemePanel } from "./components/SchemePanel";
+import * as schemesService from "@/services/schemesService";
+import { fetchSchemes, selectSchemes } from "@/store/schemesSlice";
+import { nextRung } from "@/components/Inventory/Schemes/schemeModel";
 import { BILL_COPIES } from "./components/InvoicePrint/billFormat";
 import { letterheadFor } from "@/lib/letterhead";
 import { InvoicePrint } from "./components/InvoicePrint";
@@ -125,7 +130,26 @@ export default function InvoiceEditor() {
     setForm((f) => ({ ...f, terms: rules.terms }));
   }
   const [errors, setErrors] = useState({});
+  const schemes = useSelector(selectSchemes);
+  const gifts = useGifts();
+  const itemsById = useMemo(() => Object.fromEntries(items.map((row) => [row.id, row])), [items]);
+  const giftsById = useMemo(() => Object.fromEntries(gifts.map((row) => [row.id, row])), [gifts]);
   const [saved, setSaved] = useState(null); // the bill as the server last priced it
+  /**
+   * What this bill has earned, and which of it the admin is handing over.
+   *
+   * `offers` is the server's answer — it reads the same slabs a save will —
+   * and `chosen` is the decision, because a scheme is an offer rather than a
+   * rule: "एग्जीक्यूटिव स्कीम दे भी सकता है, नहीं भी दे सकता".
+   */
+  const [offers, setOffers] = useState([]);
+  const [freebies, setFreebies] = useState([]);
+  /// Money off, worked out by the same server code a save will run.
+  const [schemeOff, setSchemeOff] = useState(0);
+  const [chosen, setChosen] = useState([]);
+  /// How many lots of each scheme to hand over, where the admin has said.
+  const [lots, setLots] = useState({});
+
   const [loading, setLoading] = useState(Boolean(invoiceId));
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -266,6 +290,106 @@ export default function InvoiceEditor() {
   const availableOf = (batchId) =>
     batches.find((row) => row.id === batchId)?.available ?? 0;
 
+  /** The lines as the scheme engine reads them: what, how many, how much. */
+  const forSchemes = useMemo(
+    () =>
+      form.lines
+        .filter((line) => line.itemId && Number(line.quantity) > 0)
+        .map((line) => {
+          const priced = previewLine({
+            item: items.find((row) => row.id === line.itemId),
+            tier: firm?.priceTier,
+            tiers,
+            quantity: line.quantity,
+          });
+          return { itemId: line.itemId, quantity: Number(line.quantity), taxableValue: priced?.taxableValue ?? 0 };
+        }),
+    [form.lines, items, firm?.priceTier, tiers],
+  );
+
+  /**
+   * A scheme is handed over when somebody presses Apply, never because it
+   * happened to fit — "डू यू वॉन्ट टू अप्लाई दिस स्कीम".
+   *
+   * A choice is kept until its product leaves the bill: dropping it the
+   * moment the quantity dips below the slab would lose the decision on a
+   * stray keystroke, and put it back differently once the number came good.
+   */
+  const live = useMemo(
+    () => (offers.length ? chosen.filter((id) => offers.some((row) => row.id === id)) : chosen),
+    [chosen, offers],
+  );
+
+  /**
+   * What the bill has earned, asked of the server so the answer is the one a
+   * save would give. Everything new is applied by default; unticking is the
+   * deliberate act, not ticking.
+   */
+  useEffect(() => {
+    dispatch(fetchSchemes());
+  }, [dispatch]);
+
+  const asking = !issued && forSchemes.length > 0;
+
+  // No products, no schemes. Read off `asking` rather than cleared in an
+  // effect, so an emptied bill cannot print goods nobody is buying even for
+  // the one render before the clearing would land.
+  const billFreebies = asking ? freebies : [];
+  const billSchemeOff = asking ? schemeOff : 0;
+
+  useEffect(() => {
+    if (!asking) return;
+    let alive = true;
+    schemesService
+      .previewSchemes({ lines: forSchemes, at: form.invoiceDate, only: live, lots })
+      .then((result) => {
+        if (!alive) return;
+        // Everything whose goods are on the bill, fired or not, so one that
+        // cannot fit can say why instead of vanishing.
+        const found = result?.offered ?? [];
+        setOffers(found);
+        setFreebies(result?.freebies ?? []);
+        setSchemeOff(Number(result?.discount) || 0);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setOffers([]);
+        setFreebies([]);
+        setSchemeOff(0);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [asking, forSchemes, form.invoiceDate, live, lots]);
+
+
+  /**
+   * What a little more would earn, read from the same slabs the server does so
+   * the hint can never promise what a save would not give.
+   */
+  const nearly = useMemo(() => {
+    const spend = forSchemes.reduce((sum, line) => sum + line.taxableValue, 0);
+    const qtyOf = (ids) =>
+      forSchemes.filter((line) => ids.includes(line.itemId)).reduce((sum, line) => sum + line.quantity, 0);
+
+    return schemes
+      .filter((scheme) => scheme.status === "ACTIVE")
+      .map((scheme) => {
+        const reached =
+          scheme.trigger === "ITEM_QTY"
+            ? qtyOf(scheme.buyItemIds ?? [])
+            : scheme.scope === "PRODUCTS"
+              ? forSchemes.filter((l) => (scheme.productIds ?? []).includes(l.itemId)).reduce((s, l) => s + l.taxableValue, 0)
+              : spend;
+        // Nothing of this scheme's products is on the bill at all; a nudge
+        // towards something nobody asked for is noise, not help.
+        if (!reached) return null;
+        return nextRung(scheme, reached, { itemsById, giftsById });
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+  }, [forSchemes, schemes, itemsById, giftsById]);
+
   /** The bill as it stands, priced in the browser the way the server will. */
   const totals = previewTotals(
     form.lines
@@ -278,6 +402,7 @@ export default function InvoiceEditor() {
           quantity: line.quantity,
         }),
       ),
+    billSchemeOff,
   );
 
   /**
@@ -298,6 +423,10 @@ export default function InvoiceEditor() {
     distributor: firm ?? {},
     dueDate: saved?.dueDate ?? "",
     ...totals,
+    // What the schemes handed over, so the sheet on screen prints it the
+    // moment Apply is pressed — not only after the bill has been saved and
+    // read back. The print template reads these two off the bill.
+    schemeFreebies: billFreebies,
     cgst: interState ? 0 : half,
     sgst: interState ? 0 : Math.round((totals.taxAmount - half) * 100) / 100,
     igst: interState ? totals.taxAmount : 0,
@@ -343,7 +472,9 @@ export default function InvoiceEditor() {
 
     setSaving(true);
     const result = await dispatch(
-      saveInvoice({ id: invoiceId, form: formToPayload(form) }),
+      // Which schemes to hand over goes with the bill: the server applies
+      // these and no others, so a skip is honoured rather than re-decided.
+      saveInvoice({ id: invoiceId, form: { ...formToPayload(form), schemeIds: live, schemeLots: lots } }),
     );
     setSaving(false);
 
@@ -517,6 +648,25 @@ export default function InvoiceEditor() {
           </Button>
         </div>
       </div>
+
+      <SchemePanel
+        offers={asking ? offers : []}
+        nearly={nearly}
+        chosen={live}
+        disabled={issued}
+        onToggle={(id) =>
+          setChosen((was) => {
+            // Taking it off also forgets how many lots were asked for: the
+            // next person to apply it starts from the usual one.
+            if (was.includes(id)) {
+              setLots(({ [id]: _gone, ...rest }) => rest)
+              return was.filter((row) => row !== id)
+            }
+            return [...was, id]
+          })
+        }
+        onLots={(id, n) => setLots((was) => ({ ...was, [id]: Math.max(1, n) }))}
+      />
 
       {reviewing && saved ? (
         <div
@@ -838,6 +988,7 @@ export default function InvoiceEditor() {
               ),
               lines: (
                 <InvoiceLines
+                  freebies={freebies}
                   form={form}
                   errors={errors}
                   items={items}

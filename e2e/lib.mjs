@@ -96,9 +96,22 @@ export async function login(page, who = ADMIN) {
   await sleep(800)
 }
 
-/** Navigates straight to a screen and waits for its <h1>. */
+/**
+ * Navigates straight to a screen and waits for its <h1>.
+ *
+ * A screen with something half-typed on it asks the browser to confirm before
+ * it is left — "डू यू वांट टू रिफ्रेश? देन यू लूज़". Puppeteer dismisses that
+ * question on its own, which means staying put and timing out here, so the
+ * answer is given for the length of the navigation and then taken back.
+ */
 export async function goto(page, to, { heading } = {}) {
-  await page.goto(`${BASE}${to}`, { waitUntil: 'networkidle0' })
+  const leave = (dialog) => dialog.accept().catch(() => {})
+  page.on('dialog', leave)
+  try {
+    await page.goto(`${BASE}${to}`, { waitUntil: 'networkidle0' })
+  } finally {
+    page.off('dialog', leave)
+  }
   await page.waitForSelector('h1', { timeout: 15000 })
   if (heading) await page.waitForFunction((h) => document.querySelector('h1')?.textContent.trim() === h, { timeout: 15000 }, heading)
   await sleep(500)

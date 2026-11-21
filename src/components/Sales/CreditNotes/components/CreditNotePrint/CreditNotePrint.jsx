@@ -307,6 +307,11 @@ export function CreditNotePrint({ note, bank, company: fromSettings, copy, headi
                 ...(shows('otherCharges')
                   ? [['OTHER CHARGES', Number(note.otherCharges) ? money(note.otherCharges) : 'NIL']]
                   : []),
+                // Free goods they are keeping: never paid for, so never
+                // credited. Only printed when there are any.
+                ...(Number(note.schemeKept) || slots.schemeKept
+                  ? [['SCHEME KEPT (−)', slot('schemeKept', money(note.schemeKept))]]
+                  : []),
                 ['ROUND OFF (+)', money(note.roundOff)],
               ].map(([label, value]) => (
                 <tr key={label}>

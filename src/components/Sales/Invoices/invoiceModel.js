@@ -136,15 +136,23 @@ export function previewLine({ item, tier, tiers, quantity }) {
 }
 
 /** The bill's own total, rounded to the rupee the way the server rounds it. */
-export function previewTotals(lines) {
+export function previewTotals(lines, schemeDiscount = 0) {
   const taxablePaise = lines.reduce((sum, line) => sum + Math.round((line?.taxableValue ?? 0) * 100), 0)
   const taxPaise = lines.reduce((sum, line) => sum + Math.round((line?.taxAmount ?? 0) * 100), 0)
-  const beforePaise = taxablePaise + taxPaise
+  /**
+   * The scheme comes off **after** the tax, the same way the server does it:
+   * a 10,000 bill with 1,000 off is still taxed on 10,000 — "जीएसटी लगेगा 10
+   * हज़ार पर". Done here too so the sheet on screen reads the same as the
+   * sheet that comes back from a save.
+   */
+  const offPaise = Math.min(Math.round((Number(schemeDiscount) || 0) * 100), taxablePaise + taxPaise)
+  const beforePaise = taxablePaise + taxPaise - offPaise
   const roundedPaise = Math.round(beforePaise / 100) * 100
 
   return {
     taxableValue: taxablePaise / 100,
     taxAmount: taxPaise / 100,
+    schemeDiscount: offPaise / 100,
     roundOff: (roundedPaise - beforePaise) / 100,
     total: roundedPaise / 100,
   }

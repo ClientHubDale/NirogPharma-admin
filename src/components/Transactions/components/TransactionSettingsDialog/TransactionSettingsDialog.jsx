@@ -20,6 +20,7 @@ export const INVOICE_TOGGLES = [
   { key: 'showVehicleNo', label: 'Vehicle No.', hint: 'Show it on the bill and on the printed copy' },
   { key: 'showEwayBill', label: 'E-way Bill No.', hint: 'Show it on the bill and on the printed copy' },
   { key: 'showCreditPeriod', label: 'Credit Period', hint: 'Credit days, taken from the distributor' },
+  { key: 'showFreeGoods', label: 'Scheme / free goods line', hint: 'The bold line under the table saying what a scheme gave away' },
 ]
 
 /**

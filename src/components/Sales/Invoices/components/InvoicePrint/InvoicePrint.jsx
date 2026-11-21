@@ -45,7 +45,9 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
   if (terms.length === 0) terms.push(...BILL_TERMS)
   // Which optional fields the admin keeps on the bill. Everything shows unless
   // settings say otherwise, so a panel with no settings still prints in full.
-  const show = { vehicleNo: true, ewayBillNo: true, creditPeriod: true, ...(showProp ?? {}) }
+  const show = { vehicleNo: true, ewayBillNo: true, creditPeriod: true, freebies: true, ...(showProp ?? {}) }
+  /// What the schemes gave away, written down when the bill was made.
+  const freebies = Array.isArray(invoice.schemeFreebies) ? invoice.schemeFreebies : []
 
   // The firm arrives flattened from the API and whole from the create screen.
   const firm = {
@@ -341,7 +343,7 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
                 [`CGST @ ${one === null ? '' : one / 2} %`, interState ? '0.00' : money(invoice.cgst ?? halfTax)],
                 [`SGST @ ${one === null ? '' : one / 2} %`, interState ? '0.00' : money(invoice.sgst ?? totalTax - halfTax)],
                 ['IGST', interState ? money(invoice.igst ?? totalTax) : '0.00'],
-                ['DISCOUNT', '0.00'],
+                [show.schemeLabel || 'SCHEME DISCOUNT', money(invoice.schemeDiscount)],
                 ['ROUND OFF', money(invoice.roundOff)],
               ].map(([label, value]) => (
                 <tr key={label}>
@@ -356,6 +358,16 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
             </tbody>
           </table>
         </div>
+
+        {/* What the schemes handed over, written under the table rather than
+            in it: a giveaway was bought separately and never was our stock,
+            so it is not a line of the sale — "अलग से, बोल्ड में". */}
+        {freebies.length > 0 && show.freebies !== false && (
+          <p className="border-t border-black px-1 py-[3px] font-bold">
+            {show.freebiesLabel || 'SCHEME / FREE GOODS'}:{' '}
+            {freebies.map((row) => `${row.quantity} ${row.unit} ${row.name}`.replace(/\s+/g, ' ')).join(', ')}
+          </p>
+        )}
 
         <p className="border-t border-black px-1 py-[3px] font-bold">
           TOTAL IN WORDS RS. {rupeesInWords(invoice.total)} ONLY.

@@ -44,7 +44,12 @@ function NumberCell({ value, onChange, label, prefix, invalid, readOnly, width =
  * Rate is not typed: it comes from the distributor's rate column, with the GST
  * taken back out of it, and the server has the last word on save.
  */
-export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, tiers, disabled, interState = false, taxRate }) {
+/**
+ * `freebies` is what the schemes gave, as the server worked it out. The rows
+ * carry `forItemId` — the line that earned them — so each badge sits under the
+ * product it belongs to.
+ */
+export function InvoiceLines({ freebies = [], form, errors, items, batchesFor, onChange, tier, tiers, disabled, interState = false, taxRate }) {
   // The headers name the rate, the same way the printed bill does.
   const pct = (value) => String(Number(Number(value).toFixed(2)))
   const rates = [...new Set(form.lines.filter((l) => l.itemId).map((l) => Number(items.find((i) => i.id === l.itemId)?.gst) || 0))]
@@ -121,18 +126,18 @@ export function InvoiceLines({ form, errors, items, batchesFor, onChange, tier, 
               // MFD. and EXP. come off the batch, so the first one chosen fills them.
               const firstBatch = batches.find((b) => b.id === line.batches.find((row) => row.batchId)?.batchId)
 
-              // What the item's scheme gives away at this quantity, and what
-              // it looks like — a giveaway carries its own picture, a
-              // catalogue item its first one.
-              const quantity = Number(line.quantity) || 0
-              const giving = item?.schemeBuyQty && item?.schemeFreeQty && quantity >= item.schemeBuyQty
-              const freeItem = item?.schemeFreeItemId ? items.find((row) => row.id === item.schemeFreeItemId) : null
-              const free = giving
-                ? `${Math.floor(quantity / item.schemeBuyQty) * item.schemeFreeQty} ${
-                    item.schemeFreeItem?.name ?? item.schemeFreeGift?.name ?? 'free'
-                  } free`
-                : ''
-              const freeImage = item?.schemeFreeGift?.imageUrl || freeItem?.images?.[0]?.url || ''
+              /**
+               * What this line actually earned.
+               *
+               * Read from the one answer the panel above was given, never
+               * worked out again here: a badge that does its own sums will
+               * sooner or later disagree with the bill — showing goods a
+               * skipped scheme would have given, or counting a quantity two
+               * schemes are sharing twice over.
+               */
+              const earned = freebies.filter((row) => row.forItemId === line.itemId)
+              const free = earned.map((row) => `${row.quantity} ${row.name} free`).join(', ')
+              const freeImage = earned[0]?.imageUrl ?? ''
 
               return (
                 <tr key={index}>

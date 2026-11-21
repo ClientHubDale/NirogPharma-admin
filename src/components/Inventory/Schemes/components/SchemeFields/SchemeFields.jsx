@@ -1,7 +1,7 @@
 import { MultiSelect } from '@/components/form/MultiSelect'
 import { SelectField } from '@/components/form/SelectField'
 import { TextField } from '@/components/form/TextField'
-import { AMOUNT_SCOPES, DISCOUNT_TYPES, REPEAT_OPTIONS } from '../../schemeModel'
+import { AMOUNT_SCOPES, DISCOUNT_TYPES } from '../../schemeModel'
 
 const decimal = (v) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
 
@@ -25,21 +25,6 @@ export function TriggerFields({ form, errors, onChange, itemOptions }) {
           onChange={(v) => onChange('buyItemIds', v)}
           error={errors.buyItemIds}
         />
-        {/* A single rung can repeat — "24 की पेटी लेगा तो 5 पीस" twice over for
-            two boxes. Brackets cannot, so the choice disappears once there is
-            more than one rung rather than sitting there lying. */}
-        {form.slabs.length === 1 ? (
-          <SelectField
-            id="scheme-repeats"
-            label="Does it repeat?"
-            searchable={false}
-            options={REPEAT_OPTIONS}
-            value={form.repeats}
-            onChange={(v) => onChange('repeats', v)}
-          />
-        ) : (
-          <div className="hidden sm:block" />
-        )}
       </>
     )
   }

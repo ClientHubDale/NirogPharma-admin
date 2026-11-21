@@ -16,10 +16,12 @@ import { kindOf, SCHEME_KIND_OPTIONS, SCHEME_STATUS_OPTIONS } from '@/components
 import { buildSchemeColumns, SCHEME_COLUMN_OPTIONS } from '@/components/Inventory/Schemes/components/SchemesTable'
 import { Button } from '@/components/ui/button'
 import {
-  schemeDeleted,
-  schemeRestored,
-  schemeStatusToggled,
+  fetchSchemes,
+  removeScheme,
   selectSchemes,
+  selectSchemesError,
+  selectSchemesStatus,
+  toggleSchemeStatus,
 } from '@/store/schemesSlice'
 
 const BASE = '/admin/inventory/schemes'
@@ -31,6 +33,8 @@ export default function Schemes() {
   const navigate = useNavigate()
   const location = useLocation()
   const schemes = useSelector(selectSchemes)
+  const loadStatus = useSelector(selectSchemesStatus)
+  const loadError = useSelector(selectSchemesError)
   const items = useItems()
   const gifts = useGifts()
   const itemsById = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items])
@@ -44,6 +48,10 @@ export default function Schemes() {
   // A notice / highlight handed over by the editor after Save.
   const [notice, setNotice] = useState(location.state?.notice ?? null)
   const [highlightId] = useState(location.state?.highlightId ?? null)
+
+  useEffect(() => {
+    dispatch(fetchSchemes())
+  }, [dispatch])
 
   // Don't show the hand-over notice again on refresh / back.
   useEffect(() => {
@@ -69,24 +77,27 @@ export default function Schemes() {
         giftsById,
         onEdit: (s) => navigate(`${BASE}/${s.id}/edit`),
         onDuplicate: (s) => navigate(`${BASE}/new`, { state: { duplicateOf: s.id } }),
-        onToggleStatus: (s) => {
-          dispatch(schemeStatusToggled(s.id))
-          setNotice({ tone: 'success', message: `${s.name} ${s.status === 'ACTIVE' ? 'deactivated' : 'activated'}.` })
+        onToggleStatus: async (s) => {
+          const next = s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+          const result = await dispatch(toggleSchemeStatus({ id: s.id, status: next }))
+          setNotice(
+            toggleSchemeStatus.rejected.match(result)
+              ? { tone: 'danger', message: result.payload?.message ?? 'Could not change that.' }
+              : { tone: 'success', message: `${s.name} ${next === 'ACTIVE' ? 'activated' : 'deactivated'}.` },
+          )
         },
-        onDelete: (s) => {
-          const index = schemes.findIndex((x) => x.id === s.id)
-          dispatch(schemeDeleted(s.id))
-          setNotice({
-            tone: 'success',
-            message: `${s.name} deleted.`,
-            undo: () => {
-              dispatch(schemeRestored({ scheme: s, index }))
-              setNotice({ tone: 'success', message: `${s.name} restored.` })
-            },
-          })
+        // No undo: the row is gone from the server, and offering to put it
+        // back when nothing kept it would be a lie.
+        onDelete: async (s) => {
+          const result = await dispatch(removeScheme(s.id))
+          setNotice(
+            removeScheme.rejected.match(result)
+              ? { tone: 'danger', message: result.payload?.message ?? 'Could not delete that.' }
+              : { tone: 'success', message: `${s.name} deleted.` },
+          )
         },
       }),
-    [itemsById, giftsById, navigate, dispatch, schemes],
+    [itemsById, giftsById, navigate, dispatch],
   )
 
   const empty = (
@@ -128,6 +139,15 @@ export default function Schemes() {
           <Plus data-icon="inline-start" /> New
         </Button>
       </PageHeader>
+
+      {loadStatus === 'failed' && (
+        <Notice tone="danger">
+          {loadError ?? 'Could not load the schemes.'}
+          <button type="button" onClick={() => dispatch(fetchSchemes())} className="ml-2 font-semibold underline underline-offset-4">
+            Try again
+          </button>
+        </Notice>
+      )}
 
       {notice && (
         <Notice tone={notice.tone} onDismiss={() => setNotice(null)}>

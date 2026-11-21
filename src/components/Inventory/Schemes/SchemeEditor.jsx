@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -27,7 +27,7 @@ import { useItems } from '@/hooks/useItems'
 import { formatPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { addGift as addGiftThunk } from '@/store/giftsSlice'
-import { schemeSaved, selectSchemes } from '@/store/schemesSlice'
+import { fetchSchemes, saveScheme, selectSchemes, selectSchemesStatus } from '@/store/schemesSlice'
 
 const BASE = '/admin/inventory/schemes'
 
@@ -167,12 +167,21 @@ function SchemeEditorForm({ schemeId, state }) {
     }
 
     setSaving(true)
-    await new Promise((r) => setTimeout(r, 400)) // mock network
-    const id = schemeId ?? `sch-${Date.now()}`
-    const scheme = formToScheme(form, id)
-    dispatch(schemeSaved(scheme))
+    const result = await dispatch(saveScheme({ id: schemeId, payload: formToScheme(form, schemeId) }))
+    setSaving(false)
+
+    if (saveScheme.rejected.match(result)) {
+      // The server checks the whole ladder, which this form cannot — a gap or
+      // an overlap only shows up when the slabs are read together.
+      const { message, details } = result.payload ?? {}
+      setErrors((e) => ({ ...e, ...details, slabsGeneral: details?.slabs ?? e.slabsGeneral, name: details?.name ?? e.name }))
+      toast({ tone: 'danger', title: message ?? 'Could not save the scheme.' })
+      return
+    }
+
+    const saved = result.payload
     navigate(BASE, {
-      state: { highlightId: id, notice: { tone: 'success', message: `${scheme.name} ${editing ? 'updated' : 'created'}.` } },
+      state: { highlightId: saved.id, notice: { tone: 'success', message: `${saved.name} ${editing ? 'updated' : 'created'}.` } },
     })
   }
 
@@ -325,9 +334,31 @@ function SchemeEditorForm({ schemeId, state }) {
   )
 }
 
-/** Remount per scheme so moving between edit pages never shows the last form. */
+/**
+ * Remounts per scheme, so moving between edit pages never shows the last form.
+ *
+ * An edit link opened cold — a bookmark, a reload — has no list behind it yet.
+ * The form is only built once the list is in, which is why the waiting is done
+ * out here: inside, `initialForm` would run against an empty list and bounce
+ * straight back to the list page.
+ */
 export default function SchemeEditor() {
   const { schemeId } = useParams()
   const { state } = useLocation()
+  const dispatch = useDispatch()
+  const status = useSelector(selectSchemesStatus)
+
+  useEffect(() => {
+    if (status === 'idle') dispatch(fetchSchemes())
+  }, [status, dispatch])
+
+  if (status === 'idle' || status === 'loading') {
+    return (
+      <div className="grid min-h-60 place-items-center" role="status" aria-label="Loading schemes">
+        <span className="size-8 animate-spin rounded-full border-3 border-mint border-t-green-deep" />
+      </div>
+    )
+  }
+
   return <SchemeEditorForm key={schemeId ?? `new-${state?.duplicateOf ?? state?.forItemId ?? ''}`} schemeId={schemeId} state={state} />
 }

@@ -161,6 +161,10 @@ export function BillTemplate({ company, bank, onChange, onChangeBank }) {
         {field('Phone numbers', 'phone')}
         {field('E-mail', 'email')}
         {field('Website', 'website')}
+        {/* The two words a scheme puts on the sheet. The layout is ours; what
+            it is called is theirs, like every other word on the bill. */}
+        {field('Scheme discount is called', 'schemeLabel', { placeholder: 'SCHEME DISCOUNT' })}
+        {field('Free goods line is called', 'freebiesLabel', { placeholder: 'SCHEME / FREE GOODS' })}
         <div className="sm:col-span-2">
           <TextAreaField
             id="bill-terms"

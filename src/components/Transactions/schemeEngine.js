@@ -110,10 +110,17 @@ export function applySchemes({ lines, schemes, date, party, itemsById, giftsById
     if (!slab) continue
 
     if (scheme.reward === 'FREE_ITEM') {
-      // Only a single-slab quantity scheme repeats: buy twice as many, get
-      // twice as much. A bracket is a bracket and gives what it says, once.
-      const times = scheme.trigger === 'ITEM_QTY' && scheme.repeats ? Math.floor(reached / slab.min) : 1
-      const effect = giveFree(scheme, slab, times)
+      /**
+       * Whether it repeats is not a question any more — it follows from the
+       * scheme itself, which is why the switch came off the screen.
+       *
+       * One quantity rung is a standing offer: every 24 earns its 5, so 48
+       * earns 10. Several rungs are brackets, and you take the one you land
+       * in. An amount never repeats — "2000 प्लस… कितना भी लेगा 2 ही केजी
+       * मिलेगा".
+       */
+      const standing = scheme.trigger === 'ITEM_QTY' && (scheme.slabs ?? []).length === 1
+      const effect = giveFree(scheme, slab, standing ? Math.floor(reached / slab.min) : 1)
       if (!effect) continue
       applied.push({ id: scheme.id, name: scheme.name, effect })
     } else if (scheme.trigger === 'ITEM_QTY') {

@@ -132,11 +132,6 @@ export const AMOUNT_SCOPES = [
   { value: 'PRODUCTS', label: 'Only the chosen products' },
 ]
 
-export const REPEAT_OPTIONS = [
-  { value: 'yes', label: 'Yes — buy twice as many, get twice as much' },
-  { value: 'no', label: 'No — once per order, however much they buy' },
-]
-
 /* ── dates ───────────────────────────────────────────── */
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -192,13 +187,12 @@ export const emptySchemeForm = () => ({
   name: '',
   partyGroup: 'all',
   priority: '100',
-  stackable: 'no',
+  stackable: 'yes',
   startDate: todayISO(),
   endDate: endAfterMonths(todayISO(), 3),
   status: 'ACTIVE',
   // trigger = ITEM_QTY
   buyItemIds: [],
-  repeats: 'yes',
   // trigger = ORDER_AMOUNT
   scope: 'CART',
   productIds: [],
@@ -222,8 +216,7 @@ export const schemeToForm = (scheme) => ({
   ...emptySchemeForm(),
   ...scheme,
   priority: s(scheme.priority),
-  stackable: scheme.stackable ? 'yes' : 'no',
-  repeats: scheme.repeats === false ? 'no' : 'yes',
+  stackable: scheme.stackable === false ? 'no' : 'yes',
   buyItemIds: scheme.buyItemIds ?? [],
   productIds: scheme.productIds ?? [],
   maxDiscount: s(scheme.maxDiscount),
@@ -266,9 +259,7 @@ export function formToScheme(form, id) {
   return {
     ...common,
     ...(form.trigger === 'ITEM_QTY'
-      ? // A single rung can repeat — buy 48 and two lots come with it. Several
-        // rungs are brackets, and a bracket repeating would contradict itself.
-        { buyItemIds: form.buyItemIds, repeats: slabs.length === 1 && form.repeats === 'yes' }
+      ? { buyItemIds: form.buyItemIds }
       : { scope: form.scope, productIds: form.scope === 'PRODUCTS' ? form.productIds : [] }),
     ...(form.reward === 'DISCOUNT'
       ? { discountType: form.discountType, maxDiscount: form.discountType === 'PERCENT' ? n(form.maxDiscount) : null }
@@ -440,8 +431,9 @@ export function describeScheme(scheme, itemsById = {}, giftsById = {}) {
 
   if (slabs.length === 1) {
     const only = slabs[0]
-    const repeat = scheme.trigger === 'ITEM_QTY' && scheme.repeats ? ', repeating' : ''
-    return `${earns} ${describeThreshold(scheme, only)} → ${describeSlab(scheme, only, { itemsById, giftsById })}${repeat}`
+    // A single quantity rung stands: every lot of that many earns it again.
+    const standing = scheme.trigger === 'ITEM_QTY' ? ', and again every ' + only.min : ''
+    return `${earns} ${describeThreshold(scheme, only)} → ${describeSlab(scheme, only, { itemsById, giftsById })}${standing}`
   }
 
   // Every rung, not the first and the last: the ones in between are exactly
@@ -451,4 +443,28 @@ export function describeScheme(scheme, itemsById = {}, giftsById = {}) {
   )
   const shown = rungs.length <= 4 ? rungs : [...rungs.slice(0, 3), `+${rungs.length - 3} more`]
   return `${earns} · ${shown.join(' · ')}`
+}
+
+
+/**
+ * The rung this document has not reached, and how far short it is.
+ *
+ * The distributor cannot want what he does not know about — "यूज़र को पता कैसे
+ * चलेगा कि [और] डालेगा तो यह मिलने वाला है" — so the next rung up is worked
+ * out from the same slabs the server reads and shown while he is still typing.
+ *
+ * `reachedFor(scheme)` says how far this document has got on that scheme's own
+ * terms: a quantity for an item scheme, an amount for a spend one.
+ */
+export function nextRung(scheme, reached, { itemsById = {}, giftsById = {} } = {}) {
+  const slabs = [...(scheme.slabs ?? [])].sort((a, b) => Number(a.min) - Number(b.min))
+  const up = slabs.find((slab) => reached < Number(slab.min))
+  if (!up) return null
+
+  return {
+    schemeId: scheme.id,
+    kind: scheme.trigger === 'ORDER_AMOUNT' ? 'AMOUNT' : 'QTY',
+    short: Math.round((Number(up.min) - reached) * 100) / 100,
+    gives: describeSlab(scheme, up, { itemsById, giftsById }),
+  }
 }

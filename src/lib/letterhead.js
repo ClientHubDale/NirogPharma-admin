@@ -21,11 +21,12 @@
  */
 const SHOW = {
   invoice: {
-    defaults: { vehicleNo: true, ewayBillNo: true, creditPeriod: true },
+    defaults: { vehicleNo: true, ewayBillNo: true, creditPeriod: true, freebies: true },
     live: (live) => ({
       vehicleNo: live.invoice?.showVehicleNo !== false,
       ewayBillNo: live.invoice?.showEwayBill !== false,
       creditPeriod: live.invoice?.showCreditPeriod !== false,
+      freebies: live.invoice?.showFreeGoods !== false,
     }),
   },
   creditNote: {
@@ -56,17 +57,26 @@ export function letterheadFor(doc, live = {}, kind = 'invoice') {
     return {
       company: live.company ?? {},
       bank: live.bank ?? {},
-      show: paper.live(live),
+      show: {
+        ...paper.live(live),
+        schemeLabel: live.company?.schemeLabel,
+        freebiesLabel: live.company?.freebiesLabel,
+      },
       taxRate: live.invoice?.defaultGstRate,
       /// Whether the sheet is showing the document's own letterhead or today's.
       ownCopy: false,
     }
   }
 
+  const words = {
+    schemeLabel: stamp.company?.schemeLabel,
+    freebiesLabel: stamp.company?.freebiesLabel,
+  }
+
   return {
     company: stamp.company ?? {},
     bank: stamp.bank ?? {},
-    show: { ...paper.defaults, ...(stamp.show ?? {}) },
+    show: { ...paper.defaults, ...(stamp.show ?? {}), ...words },
     taxRate: stamp.taxRate,
     ownCopy: true,
   }
