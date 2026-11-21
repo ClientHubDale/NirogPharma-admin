@@ -68,3 +68,31 @@ export const emptyPayment = ({ type, number, partyType }) => ({
   discount: '',
   status: 'PENDING',
 })
+
+/**
+ * Spread an amount over the bills, **oldest first** — "ऑटोमेटिकली जो सबसे
+ * पुराना इनवॉइस है उसमें चला जाए" (24:26).
+ *
+ * The office is handed a sum, not a bill-by-bill breakdown, and the oldest
+ * debt is the one that has to go. Whatever is left when every bill is clear
+ * stays on account, because money that arrived cannot be refused for having
+ * nowhere to sit.
+ *
+ * `bills` must already be oldest first, which is the order the server sends
+ * them in. Paise are kept whole so the parts always add back to the sum.
+ */
+export function spreadOldestFirst(amount, bills) {
+  let left = Math.round((Number(amount) || 0) * 100)
+  const allocations = []
+
+  for (const bill of bills) {
+    if (left <= 0) break
+    const due = Math.round((Number(bill.due) || 0) * 100)
+    if (due <= 0) continue
+    const take = Math.min(due, left)
+    allocations.push({ docId: bill.id, number: bill.number, amount: String(take / 100) })
+    left -= take
+  }
+
+  return { allocations, onAccount: left / 100 }
+}

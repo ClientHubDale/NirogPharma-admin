@@ -48,6 +48,7 @@ const Cities = lazy(() => import('@/components/Routes/Cities/Cities'))
 const Areas = lazy(() => import('@/components/Routes/Areas/Areas'))
 const PaymentIn = lazy(() => import('@/components/Finance/PaymentIn/PaymentIn'))
 const PaymentOut = lazy(() => import('@/components/Finance/PaymentOut/PaymentOut'))
+const Outstanding = lazy(() => import('@/components/Finance/Outstanding/Outstanding'))
 const TransactionEditorPage = lazy(() => import('@/components/Transactions/TransactionEditorPage'))
 const PriceListEditor = lazy(() => import('@/components/Inventory/PriceLists/PriceListEditor'))
 
@@ -85,6 +86,7 @@ const BUILT = {
   '/admin/purchase/returns': PurchaseReturns,
   '/admin/finance/payment-in': PaymentIn,
   '/admin/finance/payment-out': PaymentOut,
+  '/admin/finance/outstanding': Outstanding,
   '/admin/routes/regions': Regions,
   '/admin/routes/cities': Cities,
   '/admin/routes/areas': Areas,

@@ -703,23 +703,47 @@ ok('no overall totals row above the table', !/total · \d+ items?/i.test(await p
 
 // Issuing stock must never land in Return: that column is only what came back.
 // Out carries it, Closing drops by it, Return does not move.
-const figuresOf = async () => {
+/**
+ * The figures on the row for ONE named product.
+ *
+ * Factory Stocks is grouped by product, not by batch — the batch column reads
+ * "5 batches" — so the row to watch is the row of the product the batch
+ * belongs to, found by searching for it. Reading the top row instead made
+ * this check compare a figure that had no reason to move, which is how it
+ * passed and failed by turns depending on what else was in the table.
+ */
+const figuresOf = async (itemName) => {
   await goto(page, '/admin/stocks/factory', { heading: 'Factory Stocks' })
-  await sleep(1500)
-  const cells = await page.$$eval('tbody tr td', (tds) => tds.map((td) => td.innerText.trim()))
+  await sleep(1200)
+  const box = await page.$('[aria-label="Search item, code or batch"]')
+  await box.click({ clickCount: 3 })
+  await box.type(itemName)
+  await sleep(1800)
+
   const heads = await page.$$eval('thead th', (ths) => ths.map((t) => t.innerText.trim().toLowerCase()))
-  const width = heads.length
-  return { out: cells[heads.indexOf('out')], returned: cells[heads.indexOf('return')], width }
+  const cells = await page.$$eval(
+    'tbody tr',
+    (trs, name) => {
+      const found = trs.find((tr) => tr.innerText.includes(name))
+      return found ? [...found.querySelectorAll('td')].map((td) => td.innerText.trim()) : null
+    },
+    itemName,
+  )
+  return { out: cells?.[heads.indexOf('out')], returned: cells?.[heads.indexOf('return')], found: Boolean(cells) }
 }
 
-const before = await figuresOf()
-const anyBatch = (await api('/stocks/batches?from=2026-04-01&to=2027-03-31&limit=300')).data.batches.find((b) => b.available > 5)
+const anyBatch = (await api('/stocks/batches?limit=300')).data.batches.find((b) => b.available > 5 && b.itemName)
 const anyFirm = (await api('/distributors?limit=1')).data.distributors[0]
+const before = await figuresOf(anyBatch.itemName)
+ok('the product being issued from has a row on the factory screen', before.found, anyBatch.itemName)
 await api('/stocks/issue', {
   method: 'POST',
   body: JSON.stringify({ distributorId: anyFirm.id, invoiceNo: 'E2E/RET-CHECK', lines: [{ batchId: anyBatch.id, quantity: 5 }] }),
 })
-const after = await figuresOf()
+// By item name, like the row above: the factory screen groups by product,
+// so searching a batch number finds nothing to compare against.
+const after = await figuresOf(anyBatch.itemName)
+ok('the product is still on the factory screen after issuing', after.found, anyBatch.itemName)
 ok('issuing stock leaves Return alone', after.returned === before.returned, `${before.returned} → ${after.returned}`)
 ok('…and lands in Out instead', after.out !== before.out, `${before.out} → ${after.out}`)
 
@@ -760,4 +784,100 @@ for (const no of [MY_NUMBER]) {
   const found = (await api('/credit-notes?limit=300')).data.notes.find((row) => row.noteNo === no)
   if (found) await api(`/credit-notes/${found.id}`, { method: 'DELETE' })
 }
+
+/* ── what it is worth, bill by bill ───────────────────────────────────── */
+
+/**
+ * "यहाँ रेट किस wise से आ रहा है?" — invoice-wise, and the client had to ask
+ * because one rate was being stretched over the whole holding. An item that
+ * reached a firm on two bills at two rates is worth the two slices added up.
+ *
+ * Goods leave a godown oldest first, so a return comes off the bill it names
+ * and anything beyond that bill off the next oldest.
+ */
+const VAL = { name: 'E2E Value Item', code: 'E2E-VAL-1' }
+const VAL_BILLS = ['E2E/VAL/001', 'E2E/VAL/002']
+
+const wipeValue = async () => {
+  // A return raises a credit note, and a product on one cannot be deleted —
+  // so these go first or the whole clean-up stalls behind them.
+  for (const row of (await api('/credit-notes?limit=300')).data?.notes ?? []) {
+    if (!(row.lines ?? []).some((line) => line.itemCode === VAL.code)) continue
+    if (row.status !== 'PENDING' && row.status !== 'CANCELLED') {
+      await api(`/credit-notes/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) })
+    }
+    await api(`/credit-notes/${row.id}`, { method: 'DELETE' })
+  }
+  for (const row of (await api('/invoices?limit=300')).data?.invoices ?? []) {
+    if (!VAL_BILLS.includes(row.invoiceNo)) continue
+    if (row.status !== 'PENDING' && row.status !== 'CANCELLED') {
+      await api(`/invoices/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) })
+    }
+    await api(`/invoices/${row.id}`, { method: 'DELETE' })
+  }
+  for (const row of (await api('/stocks/batches?limit=300')).data?.batches ?? []) {
+    if (row.itemCode === VAL.code) await api(`/stocks/batches/${row.id}`, { method: 'DELETE' })
+  }
+  for (const row of (await api('/items?limit=300')).data?.items ?? []) {
+    if (row.code === VAL.code) await api(`/items/${row.id}`, { method: 'DELETE' })
+  }
+}
+await wipeValue()
+
+const valueFirm = ((await api('/distributors?limit=200')).data?.distributors ?? []).find((row) => row.priceTier)
+const body = (price) => ({ ...VAL, unit: 'BTL', category: 'Syrup', mrp: 500, gst: 0, tierPrices: [{ tier: valueFirm.priceTier, price }] })
+
+const valItem = (await api('/items', { method: 'POST', body: JSON.stringify(body(100)) })).data.item
+const valBatch = (await api('/stocks/batches', { method: 'POST', body: JSON.stringify({ itemId: valItem.id, batchNo: 'E2E-VAL-A', quantity: 500 }) })).data
+  .batch
+
+const valueBill = async (invoiceNo, quantity) => {
+  const made = (
+    await api('/invoices', {
+      method: 'POST',
+      body: JSON.stringify({
+        invoiceNo,
+        distributorId: valueFirm.id,
+        invoiceDate: '2026-11-20',
+        lines: [{ itemId: valItem.id, quantity, batches: [{ batchId: valBatch.id, quantity }] }],
+      }),
+    })
+  ).data?.invoice
+  await api(`/invoices/${made.id}/issue`, { method: 'POST' })
+}
+
+await valueBill(VAL_BILLS[0], 50) // 50 at 100
+await api(`/items/${valItem.id}`, { method: 'PATCH', body: JSON.stringify(body(120)) })
+await valueBill(VAL_BILLS[1], 30) // 30 at 120, after the rate moved
+
+const holdingOf = async () =>
+  ((await api(`/stocks/distributors?distributorId=${valueFirm.id}`)).data?.rows ?? []).find((row) => row.itemCode === VAL.code)
+
+const twoBills = await holdingOf()
+eq('both bills are in the holding', twoBills?.held, 80)
+/**
+ * The whole point. The newest rate over everything would read 9,600; each
+ * bill at its own rate reads 8,600. Written as the sum rather than the
+ * number so the check still means something if the rates change.
+ */
+eq('each bill is priced at its own rate', twoBills?.heldValue, 50 * 100 + 30 * 120)
+ok('…which is not the newest rate over the whole holding', twoBills?.heldValue !== 80 * 120, String(twoBills?.heldValue))
+eq('the rate shown is what the holding averaged', twoBills?.rate, 107.5)
+eq('…and it says so', twoBills?.mixedRates, true)
+eq('…priced from real bills', twoBills?.rateSource, 'BILL')
+
+const slices = twoBills?.invoices ?? []
+eq('every bill carries its own rate', slices.find((row) => row.invoiceNo === VAL_BILLS[0])?.rate, 100)
+eq('…and the later one its own', slices.find((row) => row.invoiceNo === VAL_BILLS[1])?.rate, 120)
+eq('…with what is still standing out of it', slices.find((row) => row.invoiceNo === VAL_BILLS[0])?.outstanding, 50)
+
+// Oldest first: 10 back on the first bill leaves 40 at 100 and 30 at 120.
+await api('/stocks/return', { method: 'POST', body: JSON.stringify({ batchId: valBatch.id, distributorId: valueFirm.id, quantity: 10, invoiceNo: VAL_BILLS[0] }) })
+const afterReturn = await holdingOf()
+eq('a return comes off the bill it names', afterReturn?.heldValue, 40 * 100 + 30 * 120)
+eq('…leaving that bill short by what went back', (afterReturn?.invoices ?? []).find((row) => row.invoiceNo === VAL_BILLS[0])?.outstanding, 40)
+
+await wipeValue()
+ok('the valuation checks take their rows with it', !(await holdingOf()))
+
 await finish(browser, errors, { ignore: /status of (400|404|409)/ })

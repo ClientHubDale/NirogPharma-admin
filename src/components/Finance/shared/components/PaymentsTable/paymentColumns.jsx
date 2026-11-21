@@ -24,8 +24,15 @@ export const PAYMENT_COLUMN_OPTIONS = [
 ]
 export const DEFAULT_PAYMENT_VISIBILITY = { comment: false }
 
-/** row = { ...payment, party, totals, collectorName } */
-export function buildPaymentColumns({ onEdit, onSetStatus, onDelete }) {
+/**
+ * row = { ...payment, party, totals, collectorName }
+ *
+ * `staffColumn` swaps Collected By for the two people the payment counts
+ * towards, which is what Payment In records now — targets are worked out of
+ * money in, so the column has to say whose money it was. Payment Out has no
+ * such people and keeps Collected By.
+ */
+export function buildPaymentColumns({ onEdit, onSetStatus, onDelete, staffColumn }) {
   return helper.columns([
     helper.accessor('date', { header: 'Date', cell: (i) => <span className="font-mono text-xs whitespace-nowrap">{dmy(i.getValue())}</span> }),
     helper.accessor('number', {
@@ -62,7 +69,18 @@ export function buildPaymentColumns({ onEdit, onSetStatus, onDelete }) {
       meta: { className: 'max-w-[11rem]' },
       cell: (i) => <span title={i.getValue()} className="block truncate text-ink">{i.getValue()}</span>,
     }),
-    helper.accessor('collectorName', { header: 'Collected By', cell: (i) => <span className="text-xs font-semibold whitespace-nowrap text-black uppercase">{i.getValue()}</span> }),
+    staffColumn
+      ? helper.accessor((r) => r.executiveName || r.managerName || '—', {
+          id: 'collectedBy',
+          header: 'Manager / Executive',
+          cell: ({ row }) => (
+            <div className="min-w-[8rem] whitespace-nowrap">
+              <p className="text-xs font-semibold text-black uppercase">{row.original.executiveName || '—'}</p>
+              <p className="text-xs text-ink-muted">{row.original.managerName || 'No manager on the party'}</p>
+            </div>
+          ),
+        })
+      : helper.accessor('collectorName', { header: 'Collected By', cell: (i) => <span className="text-xs font-semibold whitespace-nowrap text-black uppercase">{i.getValue()}</span> }),
     helper.accessor((r) => r.totals.amount, {
       id: 'amount',
       header: 'Amount',

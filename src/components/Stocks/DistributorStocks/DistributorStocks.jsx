@@ -12,6 +12,7 @@ import { FormDrawer } from '@/components/data/FormDrawer'
 import { Notice } from '@/components/data/Notice'
 import { PageHeader } from '@/components/data/PageHeader'
 import { formatINR } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
 import { SearchSelect } from '@/components/form/SearchSelect'
@@ -27,6 +28,7 @@ import {
   selectStockError,
 } from '@/store/stockSlice'
 import * as creditNotesService from '@/services/creditNotesService'
+import * as paymentsService from '@/services/paymentsService'
 import * as stockService from '@/services/stockService'
 import { buildHoldingColumns, holdingRowClass } from './components/HoldingsTable'
 import { MoveForm } from '../components/MoveForm'
@@ -58,6 +60,32 @@ export default function DistributorStocks() {
   const [returning, setReturning] = useState(null) // { form, errors, row }
   const [saving, setSaving] = useState(false)
 
+  /**
+   * What they still owe, item by item — "इसका अंदर भी डाल दो" (28:51). The
+   * dues come from Finance › Outstanding, where a bill's unpaid part is
+   * apportioned across its lines, so a row here can say both what they are
+   * holding and what is unpaid on it. Keyed distributor + item, which is
+   * exactly how a holding is keyed.
+   */
+  const [owed, setOwed] = useState(null)
+  useEffect(() => {
+    let alive = true
+    paymentsService
+      .outstanding()
+      .then((fresh) => {
+        if (!alive) return
+        const map = new Map()
+        for (const firm of fresh.rows) {
+          for (const item of firm.items) map.set(`${firm.distributorId}:${item.itemId}`, item.due)
+        }
+        setOwed(map)
+      })
+      .catch(() => alive && setOwed(null))
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const resetPage = () => setPagination((p) => ({ ...p, pageIndex: 0 }))
   const load = () => dispatch(fetchDistributorStock(periodFor(period)))
 
@@ -75,7 +103,9 @@ export default function DistributorStocks() {
         (!q ||
           row.itemName.toLowerCase().includes(q) ||
           row.itemCode?.toLowerCase().includes(q) ||
-          row.batchNo.toLowerCase().includes(q) ||
+          // Holdings are item-wise, so there is no one batch to search. The
+          // bill numbers are what they ask by — "किस इनवाइस का कितना स्टॉक".
+          row.invoices?.some((bill) => bill.invoiceNo?.toLowerCase().includes(q)) ||
           row.distributorName.toLowerCase().includes(q)) &&
         (!distributorId || row.distributorId === distributorId),
     )
@@ -91,12 +121,23 @@ export default function DistributorStocks() {
     () => filtered.reduce((sum, row) => sum + (Number(row.heldValue) || 0), 0),
     [filtered],
   )
+  /// What is unpaid on just the rows being shown, which is the same money
+  /// Finance › Outstanding totals — read item-wise rather than firm-wise.
+  const totalOwed = useMemo(
+    () => (owed ? filtered.reduce((sum, row) => sum + (owed.get(`${row.distributorId}:${row.itemId}`) ?? 0), 0) : 0),
+    [filtered, owed],
+  )
   /// How many rows are priced off the rate column rather than a real bill.
   const starred = useMemo(() => filtered.filter((row) => row.rateSource === 'TIER').length, [filtered])
 
   const columns = useMemo(
-    () => buildHoldingColumns({ onReturn: (row) => openReturn(row), onEditOpening: (row) => setOpening({ row, quantity: String(row.openingSeed ?? 0), note: row.openingNote ?? '', error: '' }) }),
-    [],
+    () =>
+      buildHoldingColumns({
+        owed,
+        onReturn: (row) => openReturn(row),
+        onEditOpening: (row) => setOpening({ row, quantity: String(row.openingSeed ?? 0), note: row.openingNote ?? '', error: '' }),
+      }),
+    [owed],
   )
 
   // The admin's figure for what a distributor held before we started counting.
@@ -184,7 +225,7 @@ export default function DistributorStocks() {
     toast({
       tone: 'success',
       title: 'Return recorded',
-      description: `${quantity} ${row.unit} of ${row.batchNo} back from ${row.distributorName}`,
+      description: `${quantity} ${row.unit} of ${row.itemName} back from ${row.distributorName}`,
     })
   }
 
@@ -200,6 +241,15 @@ export default function DistributorStocks() {
         title="Distributor Stocks"
         subtitle={`${filtered.length} ${filtered.length === 1 ? 'holding' : 'holdings'} · ${totalHeld.toLocaleString('en-IN')} in all`}
       >
+        {totalOwed > 0 && (
+          <span
+            id="holdings-owed"
+            title="Unpaid on these very items, from Finance › Outstanding"
+            className="inline-flex h-11 items-center rounded-lg bg-warning-soft px-3.5 text-sm font-semibold text-warning-ink"
+          >
+            Unpaid on this: <span className="ml-1.5 font-mono">{formatINR(totalOwed)}</span>
+          </span>
+        )}
         {totalValue > 0 && (
           <span
             id="holdings-value"
@@ -379,17 +429,23 @@ export default function DistributorStocks() {
       <Modal
         open={Boolean(bills)}
         onOpenChange={(open) => !open && setBills(null)}
-        title={bills ? `${bills.itemName} · ${bills.batchNo}` : ''}
-        description={bills ? `Every bill this batch reached ${bills.distributorName} on, newest first.` : ''}
+        title={bills ? [bills.itemName, bills.itemCode].filter(Boolean).join(' · ') : ''}
+        description={bills ? `Every bill this product reached ${bills.distributorName} on, newest first.` : ''}
         className="max-w-xl"
       >
+        {/* "यहाँ रेट किस wise से आ रहा है?" — answered here, bill by bill:
+            what each one carried, what is still standing out of it, and the
+            rate that bill charged. The row's Value column is these added up. */}
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-mint-pale text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
               <th className="py-2 pr-3">Date</th>
               <th className="py-2 pr-3">Invoice</th>
               <th className="py-2 pr-3 text-right">Issued</th>
-              <th className="py-2 text-right">Returned</th>
+              <th className="py-2 pr-3 text-right">Returned</th>
+              <th className="py-2 pr-3 text-right">Still out</th>
+              <th className="py-2 pr-3 text-right">Rate</th>
+              <th className="py-2 text-right">Value</th>
             </tr>
           </thead>
           <tbody>
@@ -397,12 +453,32 @@ export default function DistributorStocks() {
               <tr key={`${bill.invoiceNo}-${bill.at}-${index}`} className="border-b border-mint-pale/70 last:border-0">
                 <td className="py-2.5 pr-3 whitespace-nowrap">{bill.at}</td>
                 <td className="py-2.5 pr-3 font-mono text-xs font-semibold text-black">{bill.invoiceNo || '—'}</td>
-                <td className="py-2.5 pr-3 text-right font-mono tabular-nums text-green-deep">{bill.issued || '—'}</td>
-                <td className="py-2.5 text-right font-mono tabular-nums text-ink-muted">{bill.returned || '—'}</td>
+                <td className="py-2.5 pr-3 text-right font-mono tabular-nums text-green-deep">
+                  {bill.issued || '—'}
+                  {/* Goods a scheme gave away went out on this bill but were
+                      paid for by nobody, so they pull the rate down. */}
+                  {bill.free > 0 && <span className="ml-1 text-xs text-forest">({bill.free} free)</span>}
+                </td>
+                <td className="py-2.5 pr-3 text-right font-mono tabular-nums text-ink-muted">{bill.returned || '—'}</td>
+                <td className="py-2.5 pr-3 text-right font-mono tabular-nums text-black">{bill.outstanding || '—'}</td>
+                <td
+                  className={cn('py-2.5 pr-3 text-right font-mono tabular-nums', bill.source === 'BILL' ? 'text-ink-muted' : 'text-warning-ink')}
+                  title={bill.source === 'BILL' ? "This bill's own rate" : 'Not a bill of ours, so their rate column today'}
+                >
+                  {bill.rate === null || bill.rate === undefined ? '—' : formatINR(bill.rate)}
+                  {bill.source === 'BILL' ? '' : '*'}
+                </td>
+                <td className="py-2.5 text-right font-mono font-semibold tabular-nums text-black">
+                  {bill.value === null || bill.value === undefined ? '—' : formatINR(bill.value)}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        <p className="mt-3 text-xs text-ink-muted">
+          Oldest bill first when goods go out, so a return comes off the bill it names and anything beyond it off the next oldest. A rate marked
+          * came from the rate column, not a bill.
+        </p>
       </Modal>
 
       <FormDrawer

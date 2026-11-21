@@ -10,6 +10,7 @@ import {
   Send,
   UsersRound,
 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import { AppDownloadStrip } from '@/components/dashboard/AppDownloadStrip'
@@ -22,17 +23,16 @@ import { SetupBanner } from '@/components/dashboard/SetupBanner'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { WelcomeHeader } from '@/components/dashboard/WelcomeHeader'
 import { formatDaysAgo, formatINR, formatINRCompact, formatShortDate } from '@/lib/format'
+import * as paymentsService from '@/services/paymentsService'
 import { toneForOverdueDays, toneForVisits } from '@/lib/status'
 import {
   adminKpis as kpi,
   adminSetupSteps,
   attentionItems,
   creditNotes,
-  distributorOutstanding,
   distributorVisits,
   managerSales,
   newDistributors,
-  overdueBills,
   salesTrend,
   VISIT_TARGET_PER_MONTH,
 } from '@/mocks/dashboard'
@@ -53,7 +53,44 @@ export default function AdminDashboard() {
   const user = useSelector(selectUser)
   const today = salesTrend[salesTrend.length - 1]
   const maxManager = Math.max(...managerSales.map((m) => m.amount))
-  const maxOutstanding = Math.max(...distributorOutstanding.map((d) => d.amount))
+
+  /**
+   * The dues are real, read from the same place Finance › Outstanding reads
+   * them — "इसको होम पेज पे भी डालना है" (21:42). The rest of this page is
+   * still the sample data it was built against.
+   */
+  const [dues, setDues] = useState(null)
+  useEffect(() => {
+    let alive = true
+    paymentsService
+      .outstanding()
+      .then((fresh) => alive && setDues(fresh))
+      .catch(() => alive && setDues(null))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /** The oldest unpaid bills across every firm — what to chase first. */
+  const overdueBills = useMemo(
+    () =>
+      (dues?.rows ?? [])
+        .flatMap((row) => row.bills.map((bill) => ({ ...bill, party: row.distributorName })))
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 5)
+        .map((bill) => ({ id: bill.id, date: bill.invoiceDate, party: bill.party, pending: bill.due, days: bill.days })),
+    [dues],
+  )
+
+  const distributorOutstanding = useMemo(
+    () =>
+      (dues?.rows ?? [])
+        .filter((row) => row.outstanding > 0)
+        .slice(0, 5)
+        .map((row) => ({ id: row.distributorId, name: row.distributorName, amount: row.outstanding, oldestDays: row.oldestDays })),
+    [dues],
+  )
+  const maxOutstanding = Math.max(1, ...distributorOutstanding.map((d) => d.amount))
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -82,8 +119,8 @@ export default function AdminDashboard() {
         <StatCard
           icon={ReceiptText}
           label="Outstanding dues"
-          value={formatINRCompact(kpi.outstanding)}
-          hint={`${kpi.partiesPast30Days} parties past 30 days`}
+          value={dues ? formatINRCompact(dues.totals.outstanding) : '—'}
+          hint={dues ? `${dues.totals.partiesPast30Days} parties past 30 days` : 'Adding up…'}
           tone="danger"
         />
         <StatCard
@@ -109,7 +146,11 @@ export default function AdminDashboard() {
         </DashboardCard>
 
         <DashboardCard title="Outstanding — overdue bills" action={{ label: 'View all', to: '/admin/finance/outstanding' }}>
-          <OverdueBillsTable bills={overdueBills} />
+          {overdueBills.length ? (
+            <OverdueBillsTable bills={overdueBills} />
+          ) : (
+            <p className="py-6 text-center text-sm text-ink-muted">{dues ? 'Nothing is standing unpaid.' : 'Adding up the dues…'}</p>
+          )}
           <Link
             to="/admin/finance/outstanding"
             className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-green-deep hover:underline hover:underline-offset-4"
@@ -134,16 +175,20 @@ export default function AdminDashboard() {
         </DashboardCard>
 
         <DashboardCard title="Distributor outstanding" action={{ label: 'View finance', to: '/admin/finance/outstanding' }}>
-          <BarList
-            rows={distributorOutstanding.map((d) => ({
-              id: d.id,
-              label: d.name,
-              sublabel: `oldest ${d.oldestDays} days`,
-              value: formatINRCompact(d.amount),
-              percent: asPercent(d.amount, maxOutstanding),
-              tone: toneForOverdueDays(d.oldestDays),
-            }))}
-          />
+          {distributorOutstanding.length ? (
+            <BarList
+              rows={distributorOutstanding.map((d) => ({
+                id: d.id,
+                label: d.name,
+                sublabel: `oldest ${d.oldestDays} days`,
+                value: formatINRCompact(d.amount),
+                percent: asPercent(d.amount, maxOutstanding),
+                tone: toneForOverdueDays(d.oldestDays),
+              }))}
+            />
+          ) : (
+            <p className="py-6 text-center text-sm text-ink-muted">{dues ? 'No firm owes anything.' : 'Adding up the dues…'}</p>
+          )}
         </DashboardCard>
       </div>
 

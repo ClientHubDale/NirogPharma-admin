@@ -90,6 +90,7 @@ export const adminNav = [
     children: [
       { label: 'Payment In', path: `${ADMIN}/finance/payment-in` },
       { label: 'Payment Out', path: `${ADMIN}/finance/payment-out` },
+      { label: 'Outstanding', path: `${ADMIN}/finance/outstanding` },
     ],
   },
   {

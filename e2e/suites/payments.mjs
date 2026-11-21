@@ -18,6 +18,8 @@ const ITEM = { name: 'E2E Pay Tonic', code: 'E2E-PAY-ITEM' }
 const OLD_BILL = 'E2E/PAY/OLD1'
 const NEW_BILL = 'E2E/PAY/NEW1'
 const BATCH = 'E2E-PAY-A'
+/** Marks the payment this suite writes by hand, so cleanup can find it. */
+const MARK = 'E2E staff payment'
 
 const signIn = await fetch(`${API}/auth/login`, {
   method: 'POST',
@@ -250,8 +252,262 @@ has('…and what came back on credit notes', drawer, 'Credit notes')
 has('…and lists the bill still unpaid', drawer, OLD_BILL)
 ok('…with a box to settle it', Boolean(await page.$(`#alloc-${past.id}`)))
 
+/* ── whose payment it is ─────────────────────────────────────────────── */
+
+/**
+ * "Collected By" is gone, and in its place the two people the firm is
+ * already assigned — "पार्टी असाइन मैनेजर… पार्टी असाइन एग्जीक्यूटिव"
+ * (16:13, 17:18). They are not decoration: the client works targets out of
+ * money in, so every payment has to say whose it was.
+ */
+ok('the drawer no longer asks who collected it', !(await page.$('#pay-collected')))
+ok('it asks for the party’s manager instead', Boolean(await page.$('#pay-manager')))
+ok('…and the party’s executive', Boolean(await page.$('#pay-executive')))
+ok('party type is gone — "पार्टी टाइप की ज़रूरत नहीं"', !(await page.$('#pay-party-type')))
+
+const chosen = await page.$eval('#pay-manager', (el) => el.innerText.trim()).catch(() => '')
+ok(
+  'the manager fills itself in from the firm',
+  firm.managerId ? chosen === (firm.managerName ?? '') : true,
+  `${chosen} || firm has ${firm.managerName || '(none)'}`,
+)
+
+// The note on money kept on account only exists once there is money on
+// account — "किस चीज़ का पेमेंट है" has nothing to answer otherwise.
+ok('no note is asked for before money is kept on account', !(await page.$('#pay-other-note')))
+await page.type('#pay-other', '700')
+await sleep(500)
+ok('…and it is asked for as soon as there is', Boolean(await page.$('#pay-other-note')))
+await page.type('#pay-other-note', 'Advance against the Diwali order')
+
+if (firm.executives?.length) await pickOption(page, '#pay-executive', firm.executives[0].name)
+
+// "एरिया ऐड करना है, एग्जीक्यूटिव सिलेक्ट करेगा" (22:47) — which beat the
+// money came off, and nothing saves without it.
+ok('the drawer asks which area it was collected on', Boolean(await page.$('#pay-area')))
+await page.type('#pay-area', 'Rampur beat')
+await page.type('#pay-comment', MARK)
+await sleep(300)
+
+await page.evaluate(() => [...document.querySelectorAll('button[type=submit]')].find((b) => b.innerText.trim() === 'Save')?.click())
+await sleep(2500)
+
+/** The save is a round trip; give it a moment rather than reading once. */
+const waitForPayment = async (match, tries = 10) => {
+  for (let i = 0; i < tries; i += 1) {
+    const found = ((await api('/payments?limit=300')).data?.payments ?? []).find(match)
+    if (found) return found
+    await sleep(500)
+  }
+  return null
+}
+
+const written = await waitForPayment((row) => row.comment === MARK)
+ok('the payment saves', Boolean(written), 'nothing came back')
+if (written) {
+  eq('…credited to the firm’s manager', written.managerName, firm.managerName ?? '')
+  if (firm.executives?.length) eq('…and to the executive who collected it', written.executiveName, firm.executives[0].name)
+  eq('…with the money on account', written.otherPayment, 700)
+  eq('…and the reason it is on account', written.otherNote, 'Advance against the Diwali order')
+  eq('…and still only a piece of paper until the office approves it', written.status, 'PENDING')
+  eq('…and the beat it came off', written.area, 'Rampur beat')
+  // "जिस पार्टी की पेमेंट डाले उसकी number of payment दे" (14:56): the run
+  // belongs to the firm, so another firm may hold the very same number.
+  const elsewhere = ((await api('/distributors?limit=200')).data?.distributors ?? []).find((one) => one.id !== firm.id)
+  if (elsewhere) {
+    const theirNext = (await api(`/payments/next-number?distributorId=${elsewhere.id}`)).data?.number
+    const oursNext = (await api(`/payments/next-number?distributorId=${firm.id}`)).data?.number
+    ok('each firm counts its receipts on its own', theirNext !== oursNext || written.number !== theirNext, `${oursNext} vs ${theirNext}`)
+  }
+
+  await goto(page, '/admin/finance/payment-in', { heading: 'Payment In' })
+  await sleep(1500)
+  const columns = await page.$$eval('thead th', (cells) => cells.map((cell) => cell.innerText.trim()))
+  ok('the list says whose payment it is', columns.includes('MANAGER / EXECUTIVE'), columns.join(' | '))
+  const row = await page.evaluate(
+    (no) => [...document.querySelectorAll('tbody tr')].find((tr) => tr.innerText.includes(no))?.innerText ?? '',
+    written.number,
+  )
+  has('…and names them on the row', row.toUpperCase(), (firm.managerName ?? '').toUpperCase())
+  await api(`/payments/${written.id}`, { method: 'DELETE' })
+}
+
 await page.keyboard.press('Escape')
 await sleep(500)
+
+/* ── a sum handed over at the shop ───────────────────────────────────── */
+
+/**
+ * The office is given an amount, not a bill-by-bill breakdown. It goes
+ * against the oldest bill first and down the list — "जो सबसे पुराना इनवॉइस
+ * है उसमें चला जाए" (24:26) — and whatever no bill can take is kept on
+ * account rather than refused.
+ */
+await page.evaluate(() => {
+  const buttons = [...document.querySelectorAll('button')]
+  buttons.find((b) => b.innerText.includes('Create Payment In'))?.click()
+})
+await sleep(900)
+await pickOption(page, '#pay-party', firm.name)
+await sleep(1400)
+
+const owedBefore = (await account()).outstanding
+const openBills = ((await api(`/payments/dues?distributorId=${firm.id}`)).data?.bills ?? []).filter((row) => row.due > 0)
+const oldest = openBills[0]
+ok('the firm has a bill to settle', Boolean(oldest), `${openBills.length} unpaid`)
+
+if (oldest) {
+  // More than every bill put together, so the ladder is walked all the way
+  // down and the overflow has nowhere left to go but on account.
+  const owedOnBills = openBills.reduce((sum, row) => sum + row.due, 0)
+  const handed = Math.round(owedOnBills + 50)
+  await page.type('#pay-spread', String(handed))
+  await sleep(300)
+  await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Put on oldest bills')?.click())
+  await sleep(900)
+
+  const filled = await page.evaluate(() => {
+    const out = { bills: {} }
+    for (const input of document.querySelectorAll('input[id^="alloc-"]')) out.bills[input.id.replace('alloc-', '')] = Number(input.value) || 0
+    out.other = Number(document.querySelector('#pay-other')?.value) || 0
+    return out
+  })
+
+  eq('the oldest bill is settled first, and in full', filled.bills[oldest.id], oldest.due)
+  ok(
+    '…then the next one down the list',
+    openBills.every((row) => filled.bills[row.id] === row.due),
+    JSON.stringify(filled.bills),
+  )
+  const spread = Object.values(filled.bills).reduce((sum, one) => sum + one, 0)
+  eq('…and every rupee handed over is accounted for', Math.round((spread + filled.other) * 100) / 100, handed)
+  ok('…with what no bill could take kept on account', filled.other > 0, `${filled.other}`)
+
+  /**
+   * "अगर ये क्लियर हो गया तो कितना बकाया बचेगा" (19:31) — read against what
+   * is owed today, because this payment is still only a piece of paper.
+   */
+  const line = await page.$eval('#pay-after', (el) => el.innerText.trim()).catch(() => '')
+  ok('the drawer says what will be left if it clears', Boolean(line), '(no line)')
+  const expected = Math.round((owedBefore - handed) * 100) / 100
+  const figure = Math.abs(expected).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  has('…and the figure is the one the ledger holds', line, figure)
+  if (expected < 0) has('…said in their favour, not as a minus', line, 'in credit')
+
+  // Goods they sent back are money in their favour, and whoever is asking
+  // for a cheque should not be the last to hear about it.
+  const notes = ((await api(`/credit-notes?distributorId=${firm.id}&status=ISSUED&limit=50`)).data?.notes ?? []).length
+  const onScreen = await pageText(page)
+  if (notes > 0) {
+    has('their credit notes are shown beside what they owe', onScreen, 'Their credit notes')
+    has('…totalled in their favour', onScreen, 'in their favour')
+  } else {
+    ok('no credit notes panel when they have sent nothing back', !onScreen.includes('Their credit notes'))
+  }
+}
+
+await page.keyboard.press('Escape')
+await sleep(500)
+
+/* ── the cheque, and the day it can be banked ────────────────────────── */
+
+/**
+ * A cheque is money only on the day written on it — "आज 16 तारीख है, चेक 20
+ * का है" (18:12) — and both sides of it are photographed, because the back
+ * carries the endorsement that settles an argument later (18:02).
+ */
+await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.innerText.includes('Create Payment In'))?.click())
+await sleep(900)
+await pickOption(page, '#pay-party', firm.name)
+await sleep(1400)
+
+ok('a cash payment is asked nothing about cheques', !(await page.$('#pay-cheque-date')))
+await pickOption(page, '#pay-method', 'Cheque')
+await sleep(700)
+ok('choosing cheque asks for the date written on it', Boolean(await page.$('#pay-cheque-date')))
+ok('…and for the front of it', Boolean(await page.$('#cheque-front')))
+ok('…and the back', Boolean(await page.$('#cheque-back')))
+
+const typeDate = (selector, value) =>
+  page.$eval(
+    selector,
+    (el, v) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+      setter.call(el, v)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    },
+    value,
+  )
+
+const dayFrom = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)
+
+await page.type('#pay-reference', '004321')
+await page.type('#pay-area', 'Rampur beat')
+await page.type('#pay-other', '5000')
+await sleep(400)
+await page.type('#pay-other-note', 'Cheque against the old bills')
+await page.type('#pay-comment', MARK)
+
+// A cheque dated before it was handed over is somebody typing the wrong
+// date, and it would fall straight into an overdue reminder.
+await typeDate('#pay-cheque-date', dayFrom(-1))
+await page.evaluate(() => [...document.querySelectorAll('button[type=submit]')].find((b) => b.innerText.trim() === 'Save')?.click())
+await sleep(1200)
+const refused = await page.$$eval('.text-destructive', (es) => es.map((e) => e.innerText.trim()))
+ok('a cheque dated before it was handed over is refused', refused.some((one) => /before the day/i.test(one)), JSON.stringify(refused))
+
+await typeDate('#pay-cheque-date', dayFrom(0))
+await sleep(300)
+await page.evaluate(() => [...document.querySelectorAll('button[type=submit]')].find((b) => b.innerText.trim() === 'Save')?.click())
+await sleep(2000)
+
+const postDated = await waitForPayment((row) => row.comment === MARK && row.method === 'CHEQUE')
+ok('the cheque saves', Boolean(postDated), 'nothing came back')
+if (postDated) {
+  eq('…with the day it is dated for', postDated.chequeDate, dayFrom(0))
+  eq('…and its number', postDated.reference, '004321')
+
+  /**
+   * Due today, so the office is told — "उस डेट पे रिमाइंडर आना चाहिए"
+   * (18:25), with the cheque number and the amount on it.
+   */
+  const due = (await api('/payments/cheques-due')).data
+  ok('a cheque due today is on the list to bank', (due.cheques ?? []).some((one) => one.id === postDated.id), `${due.cheques?.length} due`)
+
+  await goto(page, '/admin/finance/payment-in', { heading: 'Payment In' })
+  await sleep(2000)
+  const banner = await page.$eval('#cheques-due', (el) => el.innerText.replace(/\n/g, ' ')).catch(() => '')
+  ok('and the screen says so on the way in', /waiting to be banked/.test(banner), banner.slice(0, 120))
+
+  /**
+   * Approving is what makes the money real and rejecting puts it back on
+   * the books, so neither may happen on a mis-click — "गलती से क्लिक हो
+   * गया तो" (27:43).
+   */
+  await page.evaluate((no) => {
+    const row = [...document.querySelectorAll('tbody tr')].find((tr) => tr.innerText.includes(no))
+    row?.querySelector('button[aria-label^="Actions"]')?.scrollIntoView({ block: 'center' })
+  }, postDated.number)
+  await sleep(400)
+  await page.click('button[aria-label^="Actions"]')
+  await sleep(600)
+  await page.evaluate(() => [...document.querySelectorAll('[data-slot=dropdown-menu-item]')].find((i) => /Approve/i.test(i.innerText))?.click())
+  await sleep(900)
+
+  const asked = await page.$eval('[role="dialog"]', (d) => d.innerText).catch(() => '')
+  ok('approving asks before it does anything', /Approve this payment\?/.test(asked), asked.slice(0, 120))
+  has('…and says how much is at stake', asked, '5,000')
+  const untouched = ((await api('/payments?limit=300')).data?.payments ?? []).find((one) => one.id === postDated.id)
+  eq('…and nothing moves while it is asking', untouched?.status, 'PENDING')
+
+  await page.keyboard.press('Escape')
+  await sleep(400)
+
+  if (postDated.status === 'APPROVED') {
+    await api(`/payments/${postDated.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'REJECTED' }) })
+  }
+  await api(`/payments/${postDated.id}`, { method: 'DELETE' })
+}
 
 /* ── what the stock with them is worth ────────────────────────────────── */
 
@@ -274,10 +530,16 @@ ok('…beside the rate behind it', money.some((text) => text.includes('@ ₹')),
  * valuation nobody can trace is worse than none.
  */
 const priced = (await api('/stocks/distributors')).data?.rows ?? []
-ok('every holding carries a value', priced.every((row) => row.heldValue !== null), JSON.stringify(priced.slice(0, 2)))
+ok(
+  'every holding carries a value',
+  priced.every((row) => row.heldValue !== null),
+  JSON.stringify(priced.filter((row) => row.heldValue === null).map((row) => `${row.distributorName}/${row.itemName}`)),
+)
 ok(
   '…and each says which price it used',
-  priced.every((row) => row.rateSource === 'BILL' || row.rateSource === 'TIER'),
+  // MIXED is the honest answer for a holding that came on our bills and also
+  // by other means — it is priced, and the screen says both halves.
+  priced.every((row) => ['BILL', 'TIER', 'MIXED'].includes(row.rateSource)),
   JSON.stringify(priced.map((row) => row.rateSource)),
 )
 

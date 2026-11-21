@@ -20,10 +20,21 @@ export async function getPayment(id) {
   return data.data.payment
 }
 
-/** What the next payment will be called, so the drawer can offer it. */
-export async function nextPaymentNo(at) {
-  const { data } = await api.get('/payments/next-number', query({ at }))
+/**
+ * What the next payment will be called, so the drawer can offer it.
+ *
+ * Numbers run **per firm** — each distributor has its own 0001, 0002… — so
+ * the party has to be named before a number means anything.
+ */
+export async function nextPaymentNo(at, distributorId) {
+  const { data } = await api.get('/payments/next-number', query({ at, distributorId }))
   return data.data.number
+}
+
+/** Cheques whose day has come and that nobody has banked yet. */
+export async function chequesDue(until) {
+  const { data } = await api.get('/payments/cheques-due', query({ until }))
+  return data.data
 }
 
 /**
@@ -41,6 +52,16 @@ export async function duesFor(distributorId, exceptPaymentId) {
 export async function accounts() {
   const { data } = await api.get('/payments/accounts')
   return data.data.accounts
+}
+
+/**
+ * What is still owed — firm-wise, bill-wise with how old each bill is, and
+ * item-wise under both. One reading answers all three, because an item's
+ * share of a due is only knowable bill by bill.
+ */
+export async function outstanding(params = {}) {
+  const { data } = await api.get('/payments/outstanding', query(params))
+  return data.data
 }
 
 export async function createPayment(payload) {

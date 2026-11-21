@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownLeft, Plus } from 'lucide-react'
+import { ArrowDownLeft, CalendarClock, Plus } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import { Modal } from '@/components/common/Modal'
 import { DataTable } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
 import { FormDrawer } from '@/components/data/FormDrawer'
@@ -14,13 +15,15 @@ import { useToast } from '@/components/common/Toast'
 import { Button } from '@/components/ui/button'
 import { presetRange } from '@/lib/dateRange'
 import { formatINR } from '@/lib/format'
+import * as creditNotesService from '@/services/creditNotesService'
 import * as paymentsService from '@/services/paymentsService'
 import * as usersService from '@/services/usersService'
 import { selectUser } from '@/store/authSlice'
 import { fetchDistributors, selectDistributors } from '@/store/distributorsSlice'
+import { selectRoutes } from '@/store/geographySlice'
 import { buildPaymentColumns, DEFAULT_PAYMENT_VISIBILITY } from '../shared/components/PaymentsTable'
 import { PaymentForm } from '../shared/components/PaymentForm'
-import { paymentTotals } from '../shared/paymentModel'
+import { paymentTotals, spreadOldestFirst } from '../shared/paymentModel'
 import { PAYMENT_METHODS, PAYMENT_STATUSES, PAYMENT_TYPES } from '../shared/paymentTypes'
 
 const PAGE_SIZE = 20
@@ -46,6 +49,12 @@ export default function PaymentIn() {
   const dispatch = useDispatch()
   const toast = useToast()
   const distributors = useSelector(selectDistributors)
+  /**
+   * The beats, offered as suggestions on the Area box. They come from the
+   * Routes screens, which have no tables behind them yet — so this is a
+   * hint, not a list to pick from, and anything may be typed.
+   */
+  const routes = useSelector(selectRoutes)
   const me = useSelector(selectUser)
   const isOffice = me?.role === 'ADMIN'
 
@@ -67,6 +76,8 @@ export default function PaymentIn() {
   const [drawer, setDrawer] = useState(null)
   const [bills, setBills] = useState([])
   const [account, setAccount] = useState(null)
+  /// Goods they sent back, shown beside what they owe — "उसका क्रेडिट नोट भी".
+  const [notes, setNotes] = useState([])
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -118,13 +129,28 @@ export default function PaymentIn() {
     [payments, firmById],
   )
 
+  /**
+   * Cheques whose day has come and that nobody has banked yet — "उस डेट पे
+   * रिमाइंडर आना चाहिए" (18:25). Read off every payment loaded rather than
+   * the filtered view: a cheque that came due last month is exactly the one
+   * this month's filter would hide.
+   */
+  const chequesDue = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return payments.filter((row) => row.method === 'CHEQUE' && row.status === 'PENDING' && row.chequeDate && row.chequeDate <= today)
+  }, [payments])
+  const [onlyCheques, setOnlyCheques] = useState(false)
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter((row) => {
       if (row.date < range.start || row.date > range.end) return false
       if (status && row.status !== status) return false
       if (method && row.method !== method) return false
-      if (userId && row.collectedById !== userId) return false
+      // The filter follows whoever the payment counts towards, which is the
+      // only thing targets are read by now.
+      if (userId && row.managerId !== userId && row.executiveId !== userId) return false
+      if (onlyCheques && !chequesDue.some((one) => one.id === row.id)) return false
       if (!q) return true
       return (
         row.number.toLowerCase().includes(q) ||
@@ -134,7 +160,7 @@ export default function PaymentIn() {
         row.allocations.some((a) => a.number.toLowerCase().includes(q))
       )
     })
-  }, [rows, range, status, method, userId, search])
+  }, [rows, range, status, method, userId, search, onlyCheques, chequesDue])
 
   // Only money that is really ours. A pending payment is a piece of paper.
   const banked = filtered.filter((row) => row.status === 'APPROVED').reduce((sum, row) => sum + row.amount, 0)
@@ -148,8 +174,12 @@ export default function PaymentIn() {
 
   const draft = drawer?.payment
 
+  /**
+   * Numbers run per firm now — "जिस पार्टी की पेमेंट डाले उसकी number of
+   * payment दे" — so the drawer cannot offer one until the party is chosen.
+   */
   const openCreate = async () => {
-    const number = await paymentsService.nextPaymentNo(today()).catch(() => '')
+    const number = ''
     setBills([])
     setAccount(null)
     setDrawer({
@@ -159,14 +189,22 @@ export default function PaymentIn() {
         number,
         date: today(),
         partyId: '',
-        collectedBy: me?.id ?? '',
+        managerId: '',
+        executiveId: '',
         method: 'CASH',
         reference: '',
+        chequeDate: '',
+        chequeFront: null,
+        chequeBack: null,
+        area: '',
         comment: '',
         documents: [],
         allocations: [],
         otherPayment: '',
+        otherNote: '',
         discount: '',
+        /// Typed at the top of Settle bills, spread over the bills, then gone.
+        spread: '',
       },
     })
   }
@@ -183,13 +221,19 @@ export default function PaymentIn() {
         number: row.number,
         date: row.at,
         partyId: row.distributorId,
-        collectedBy: row.collectedById,
+        managerId: row.managerId ?? '',
+        executiveId: row.executiveId ?? '',
         method: row.method,
         reference: row.reference,
+        chequeDate: row.chequeDate ?? '',
+        chequeFront: row.chequeFront ?? null,
+        chequeBack: row.chequeBack ?? null,
+        area: row.area ?? '',
         comment: row.comment,
         documents: row.documents ?? [],
         allocations: row.allocations.map((a) => ({ docId: a.invoiceId, number: a.invoiceNo, amount: String(a.amount) })),
         otherPayment: row.otherPayment ? String(row.otherPayment) : '',
+        otherNote: row.otherNote ?? '',
         discount: row.discount ? String(row.discount) : '',
       },
     })
@@ -201,6 +245,7 @@ export default function PaymentIn() {
     if (!draft?.partyId) {
       setBills([])
       setAccount(null)
+      setNotes([])
       return
     }
     let alive = true
@@ -216,6 +261,11 @@ export default function PaymentIn() {
         setBills([])
         setAccount(null)
       })
+    // Only issued notes are money; a draft is still being argued about.
+    creditNotesService
+      .listCreditNotes({ distributorId: draft.partyId, status: 'ISSUED', limit: 50 })
+      .then(({ notes: rows }) => alive && setNotes(rows ?? []))
+      .catch(() => alive && setNotes([]))
     return () => {
       alive = false
     }
@@ -230,15 +280,75 @@ export default function PaymentIn() {
     [bills, draft?.allocations],
   )
 
+  /**
+   * Choosing the party brings its own people with it — "ऑटोमेटिक आ जाएगा"
+   * — because the office should not be typing what the firm already knows.
+   * With several executives on a firm nobody is guessed; the person
+   * recording it picks, since the target follows whoever is chosen.
+   */
+  const staffOf = (partyId) => {
+    const firm = firmById[partyId]
+    const executives = firm?.executives ?? []
+    return { managerId: firm?.managerId ?? '', executiveId: executives.length === 1 ? executives[0].id : '' }
+  }
+
   const setField = (field, value) =>
     setDrawer((d) => ({
       ...d,
-      payment: { ...d.payment, [field]: value, ...(field === 'partyId' ? { allocations: [] } : {}) },
+      payment: { ...d.payment, [field]: value, ...(field === 'partyId' ? { allocations: [], ...staffOf(value) } : {}) },
       errors: { ...d.errors, [field]: undefined },
     }))
 
+  /**
+   * The firm's own next receipt number, fetched when the firm is picked.
+   * Only for a new payment: an existing one keeps the number it was given.
+   */
+  useEffect(() => {
+    if (!draft?.partyId || drawer?.editingId) return
+    let alive = true
+    paymentsService
+      .nextPaymentNo(draft.date, draft.partyId)
+      .then((number) => {
+        if (!alive) return
+        setDrawer((d) => (d && !d.editingId ? { ...d, payment: { ...d.payment, number } } : d))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [draft?.partyId, draft?.date, drawer?.editingId])
+
+  const areaOptions = useMemo(() => [...new Set((routes ?? []).map((one) => one.name).filter(Boolean))].sort(), [routes])
+
+  /** The firm's own manager and executives, which is what "party assigned" means. */
+  const staff = useMemo(() => {
+    const firm = firmById[draft?.partyId]
+    return {
+      managerOptions: firm?.managerId ? [{ value: firm.managerId, label: firm.managerName || 'Manager' }] : [],
+      executiveOptions: (firm?.executives ?? []).map((one) => ({ value: one.id, label: one.name })),
+    }
+  }, [firmById, draft?.partyId])
+
   const allocate = (bill, value) =>
     setDrawer((d) => {
+      /**
+       * A sum handed over at the shop, put against the oldest bill first and
+       * then the next — "जो सबसे पुराना इनवॉइस है उसमें चला जाए". What no
+       * bill can take is kept on account rather than turned away.
+       */
+      if (bill === 'SPREAD') {
+        const { allocations, onAccount } = spreadOldestFirst(value, openBills)
+        return {
+          ...d,
+          payment: {
+            ...d.payment,
+            allocations,
+            otherPayment: onAccount > 0 ? String(onAccount) : '',
+            spread: '',
+          },
+          errors: { ...d.errors, allocations: undefined, amount: undefined },
+        }
+      }
       if (bill === 'ALL') {
         const allocations = openBills.map((row) => ({ docId: row.id, number: row.number, amount: String(row.due) }))
         return { ...d, payment: { ...d.payment, allocations }, errors: { ...d.errors, allocations: undefined, amount: undefined } }
@@ -254,6 +364,14 @@ export default function PaymentIn() {
     if (!draft.date) found.date = 'Choose a date.'
     if (!draft.number?.trim()) found.number = 'Enter a payment number.'
     if (draft.method === 'CHEQUE' && !draft.reference?.trim()) found.reference = 'Enter the cheque number.'
+    // A cheque with no date on it cannot be banked, and nobody can be
+    // reminded about it either.
+    if (draft.method === 'CHEQUE' && !draft.chequeDate) found.chequeDate = 'Enter the date written on the cheque.'
+    else if (draft.method === 'CHEQUE' && draft.chequeDate < draft.date) {
+      found.chequeDate = 'A cheque cannot be dated before the day it was handed over.'
+    }
+    // "एरिया ऐड करना है" — which beat the money came off.
+    if (!draft.area?.trim()) found.area = 'Which area was this collected on?'
     if (paymentTotals(draft).amount <= 0) found.amount = 'Enter an amount, or settle at least one bill.'
     if (Object.keys(found).length) return setDrawer((d) => ({ ...d, errors: found }))
 
@@ -261,12 +379,18 @@ export default function PaymentIn() {
       number: draft.number.trim(),
       distributorId: draft.partyId,
       at: draft.date,
-      collectedById: draft.collectedBy || undefined,
+      managerId: draft.managerId || undefined,
+      executiveId: draft.executiveId || undefined,
       method: draft.method,
       reference: draft.reference?.trim() ?? '',
+      chequeDate: draft.method === 'CHEQUE' ? draft.chequeDate || undefined : undefined,
+      chequeFront: draft.method === 'CHEQUE' ? (draft.chequeFront ?? null) : null,
+      chequeBack: draft.method === 'CHEQUE' ? (draft.chequeBack ?? null) : null,
+      area: draft.area?.trim() ?? '',
       comment: draft.comment?.trim() ?? '',
       documents: draft.documents ?? [],
       otherPayment: Number(draft.otherPayment) || 0,
+      otherNote: draft.otherNote?.trim() ?? '',
       discount: Number(draft.discount) || 0,
       allocations: draft.allocations
         .filter((a) => Number(a.amount) > 0)
@@ -296,6 +420,13 @@ export default function PaymentIn() {
   }
 
   /* ── approving ────────────────────────────────────────────────────── */
+
+  /**
+   * Approving is the thing that makes the money real, and rejecting puts it
+   * straight back on the books. Neither should happen on a mis-click —
+   * "गलती से क्लिक हो गया तो" (27:43) — so both are asked for first.
+   */
+  const [deciding, setDeciding] = useState(null) // { row, next }
 
   const setStatusOf = async (row, next) => {
     try {
@@ -328,8 +459,10 @@ export default function PaymentIn() {
         onEdit: openEdit,
         // Approving is what finally makes the money real, so it is the
         // office's alone. Everyone else may record and look.
-        onSetStatus: isOffice ? setStatusOf : null,
+        onSetStatus: isOffice ? (row, next) => setDeciding({ row, next }) : null,
         onDelete: removePayment,
+        // Payment In counts towards the party's own manager and executive.
+        staffColumn: true,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isOffice, payments],
@@ -357,6 +490,44 @@ export default function PaymentIn() {
       </PageHeader>
 
       {error && <Notice tone="danger">{error}</Notice>}
+
+      {/* The cheques whose date has arrived. Until there is somewhere to send
+          a reminder, the screen itself is the reminder. */}
+      {chequesDue.length > 0 && (
+        <div
+          id="cheques-due"
+          className="flex flex-wrap items-center gap-3 rounded-xl border border-warning-soft bg-warning-soft px-4 py-3 text-sm text-warning-ink"
+        >
+          <CalendarClock className="size-4 shrink-0" />
+          <p className="flex-1">
+            <span className="font-semibold">
+              {chequesDue.length} cheque{chequesDue.length === 1 ? '' : 's'}
+            </span>{' '}
+            {chequesDue.length === 1 ? 'is' : 'are'} dated today or earlier and still waiting to be banked —{' '}
+            <span className="font-mono font-semibold">{formatINR(chequesDue.reduce((sum, one) => sum + one.amount, 0))}</span>.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const showing = !onlyCheques
+              setOnlyCheques(showing)
+              // The date filter is on the day the cheque was taken in, and an
+              // overdue cheque was taken in long before today — so the range
+              // is opened back to the oldest of them, not to a fixed preset.
+              if (showing) {
+                const oldest = chequesDue.reduce((first, one) => (one.at < first ? one.at : first), chequesDue[0].at)
+                setRange({ preset: 'custom', start: oldest, end: new Date().toISOString().slice(0, 10) })
+              } else {
+                setRange({ preset: 'thisMonth', ...presetRange('thisMonth') })
+              }
+            }}
+            className="font-semibold underline underline-offset-4"
+          >
+            {onlyCheques ? 'Show everything' : 'Show them'}
+          </button>
+        </div>
+      )}
+
       {notice && (
         <Notice tone={notice.tone} onDismiss={() => setNotice(null)}>
           {notice.message}
@@ -379,7 +550,14 @@ export default function PaymentIn() {
             <DateRangeFilter value={range} onChange={setRange} />
             <SearchSelect aria-label="Filter by status" placeholder="Select status" clearable searchable={false} options={PAYMENT_STATUSES} value={status} onChange={setStatus} />
             <SearchSelect aria-label="Filter by payment type" placeholder="Select type" clearable searchable={false} options={PAYMENT_METHODS} value={method} onChange={setMethod} />
-            <SearchSelect aria-label="Filter by user" placeholder="Select user" clearable options={userOptions} value={userId} onChange={setUserId} />
+            <SearchSelect
+              aria-label="Filter by manager or executive"
+              placeholder="Manager / executive"
+              clearable
+              options={userOptions}
+              value={userId}
+              onChange={setUserId}
+            />
           </div>
         </div>
 
@@ -432,6 +610,59 @@ export default function PaymentIn() {
         )}
       </section>
 
+      {/* What approving and rejecting actually mean, said in money, before
+          either one happens. */}
+      <Modal
+        open={Boolean(deciding)}
+        onOpenChange={(open) => !open && setDeciding(null)}
+        title={deciding?.next === 'APPROVED' ? 'Approve this payment?' : deciding?.next === 'REJECTED' ? 'Reject this payment?' : 'Move back to pending?'}
+        description={deciding ? `${deciding.row.number} · ${deciding.row.party?.name ?? ''}` : ''}
+        className="max-w-md"
+        footer={
+          <>
+            <Button variant="outline" size="lg" onClick={() => setDeciding(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="lg"
+              onClick={async () => {
+                const { row, next } = deciding
+                setDeciding(null)
+                await setStatusOf(row, next)
+              }}
+            >
+              {deciding?.next === 'APPROVED' ? 'Yes, approve' : deciding?.next === 'REJECTED' ? 'Yes, reject' : 'Yes, move it back'}
+            </Button>
+          </>
+        }
+      >
+        {deciding && (
+          <div className="space-y-3 text-sm">
+            <p className="font-mono text-2xl font-extrabold text-black">{formatINR(deciding.row.totals.amount)}</p>
+            <p className="text-ink">
+              {deciding.next === 'APPROVED' ? (
+                <>
+                  This says the money is really in the company's account. It comes straight off what{' '}
+                  <span className="font-semibold">{deciding.row.party?.name}</span> owes.
+                </>
+              ) : deciding.next === 'REJECTED' ? (
+                <>
+                  Whatever this settled goes back on <span className="font-semibold">{deciding.row.party?.name}</span>'s account — which
+                  is what happens when a cheque comes back.
+                </>
+              ) : (
+                <>This stops counting as money until it is approved again.</>
+              )}
+            </p>
+            {deciding.row.method === 'CHEQUE' && deciding.row.chequeDate && (
+              <p className="rounded-xl bg-bg px-3.5 py-2.5 text-xs text-ink-muted">
+                Cheque {deciding.row.reference || ''} is dated {deciding.row.chequeDate.split('-').reverse().join('-')}.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
       <FormDrawer
         open={Boolean(drawer)}
         onOpenChange={(open) => !open && setDrawer(null)}
@@ -457,6 +688,10 @@ export default function PaymentIn() {
               errors={drawer.errors}
               partyOptions={partyOptions}
               userOptions={userOptions}
+              staff={staff}
+              areaOptions={areaOptions}
+              account={account}
+              creditNotes={notes}
               bills={openBills}
               onAllocate={allocate}
             />
