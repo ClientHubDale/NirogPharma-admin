@@ -430,14 +430,16 @@ has('and it names the bill', sheet, anyBill.invoiceNo)
 has('and says who it is for', sheet, anyBill.distributorName)
 
 // The goods table is ruled down the page like the client's own printed pad:
-// the items, then blanks, always twenty rows between the heading row and the
-// total — so a one-line bill still prints a full sheet.
+// the items, then blanks, always twenty rows above the total — so a one-line
+// bill still prints a full sheet.
 const ruled = await page.evaluate(() => {
   const head = [...document.querySelectorAll('th')].find((th) => th.textContent.includes('BATCH NO.'))
   const body = head?.closest('table')?.querySelector('tbody')
   const rows = [...(body?.rows ?? [])]
-  // The first row carries the goods heading and the last one the totals.
-  return rows.length - 2
+  // Only the last row is not goods: it carries the totals. The sheet used to
+  // open with a row repeating the goods heading, which the band above the
+  // table already says, and that row is gone.
+  return rows.length - 1
 })
 eq('the bill is ruled to twenty goods rows', ruled, 20)
 

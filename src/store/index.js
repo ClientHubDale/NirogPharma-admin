@@ -6,6 +6,7 @@ import geographyReducer from './geographySlice'
 import giftsReducer from './giftsSlice'
 import invoicesReducer from './invoicesSlice'
 import itemsReducer from './itemsSlice'
+import ordersReducer from './ordersSlice'
 import partiesReducer from './partiesSlice'
 import priceListsReducer from './priceListsSlice'
 import priceTiersReducer from './priceTiersSlice'
@@ -15,6 +16,7 @@ import settingsReducer from './settingsSlice'
 import stockReducer from './stockSlice'
 import usersReducer from './usersSlice'
 import paymentsReducer from './paymentsSlice'
+import paymentsOutReducer from './paymentsOutSlice'
 import transactionsReducer from './transactionsSlice'
 import schemesReducer from './schemesSlice'
 
@@ -23,6 +25,7 @@ export const store = configureStore({
     auth: authReducer,
     items: itemsReducer,
     invoices: invoicesReducer,
+    orders: ordersReducer,
     schemes: schemesReducer,
     priceLists: priceListsReducer,
     priceTiers: priceTiersReducer,
@@ -32,6 +35,7 @@ export const store = configureStore({
     parties: partiesReducer,
     transactions: transactionsReducer,
     payments: paymentsReducer,
+    paymentsOut: paymentsOutReducer,
     attendance: attendanceReducer,
     users: usersReducer,
     distributors: distributorsReducer,

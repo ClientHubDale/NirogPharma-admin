@@ -9,7 +9,7 @@ export { rupeesInWords }
  * screen renders this same sheet with inputs dropped into it through `slots`,
  * so what the admin fills in is literally what comes out of the printer.
  */
-export function InvoicePrint({ invoice, bank, company: fromSettings, copy, heading, show: showProp, taxRate, slots = {} }) {
+export function InvoicePrint({ invoice, bank, company: fromSettings, copy, heading, numberLabel = 'INVOICE NO.', show: showProp, taxRate, slots = {} }) {
   if (!invoice) return null
 
   // The letterhead is the admin's to change; these are only the fallbacks for
@@ -45,7 +45,14 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
   if (terms.length === 0) terms.push(...BILL_TERMS)
   // Which optional fields the admin keeps on the bill. Everything shows unless
   // settings say otherwise, so a panel with no settings still prints in full.
-  const show = { vehicleNo: true, ewayBillNo: true, creditPeriod: true, freebies: true, ...(showProp ?? {}) }
+  /**
+   * `batches` off drops the Batch / Mfd. / Exp. columns from the printed
+   * table. A sales order names no batch, so printing those three would be
+   * three empty columns on every sheet.
+   */
+  const show = { vehicleNo: true, ewayBillNo: true, creditPeriod: true, freebies: true, batches: true, ...(showProp ?? {}) }
+  /// How many columns the printed table has, so the filler cells match it.
+  const columnCount = show.batches ? 14 : 11
   /// What the schemes gave away, written down when the bill was made.
   const freebies = Array.isArray(invoice.schemeFreebies) ? invoice.schemeFreebies : []
 
@@ -208,7 +215,9 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
           </section>
 
           <section className="space-y-[1px] px-2 py-1">
-            <Meta label="INVOICE NO.">{slot('invoiceNo', invoice.invoiceNo)}</Meta>
+            {/* "INVOICE NO." on a bill, "ORDER NO." on a sales order — the
+                sheet is the same sheet either way. */}
+            <Meta label={numberLabel}>{slot('invoiceNo', invoice.invoiceNo)}</Meta>
             <Meta label="DATE">{slot('invoiceDate', billDate(invoice.invoiceDate))}</Meta>
             <Meta label="TRANSPORT">{slot('transport', invoice.transport || '')}</Meta>
             {/* Switched off in settings, a field leaves the form and the paper
@@ -229,9 +238,13 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
               <tr>
                 <Head className="w-8">S.<br />NO</Head>
                 <Head className="text-left">DESCRIPTION  OF GOODS</Head>
-                <Head className="w-16">BATCH NO.</Head>
-                <Head className="w-14">MFD.</Head>
-                <Head className="w-14">EXP.</Head>
+                {show.batches && (
+                  <>
+                    <Head className="w-16">BATCH NO.</Head>
+                    <Head className="w-14">MFD.</Head>
+                    <Head className="w-14">EXP.</Head>
+                  </>
+                )}
                 <Head className="w-12">HSN<br />CODE</Head>
                 <Head className="w-10">QTY.<br />(IN BOX)</Head>
                 <Head className="w-12">UOM<br />(IN BOTTLE)</Head>
@@ -244,13 +257,11 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <Cell />
-                <Cell className="text-left font-bold">{company.goodsHeading}</Cell>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <Cell key={i} />
-                ))}
-              </tr>
+              {/* No heading row over the items. The band directly above the
+                  table already reads "<goods heading> DRUG LICENCE NO. …", so
+                  repeating the words as a ruled row inside the table said the
+                  same thing twice and cost a line of the sheet. The heading
+                  itself is still the admin's, in Settings › Bill Template. */}
               {lines.map((line, index) => {
                 const tax = Number(line.taxAmount) || 0
                 const half = Math.round((tax / 2) * 100) / 100
@@ -258,9 +269,13 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
                   <tr key={line.id ?? index}>
                     <Cell className="font-bold">{index + 1}</Cell>
                     <Cell className="text-left">{line.itemName}</Cell>
-                    <Cell className="font-bold">{line.batchNo}</Cell>
-                    <Cell className="font-bold">{monthYear(line.mfgDate)}</Cell>
-                    <Cell className="font-bold">{monthYear(line.expiryDate)}</Cell>
+                    {show.batches && (
+                      <>
+                        <Cell className="font-bold">{line.batchNo}</Cell>
+                        <Cell className="font-bold">{monthYear(line.mfgDate)}</Cell>
+                        <Cell className="font-bold">{monthYear(line.expiryDate)}</Cell>
+                      </>
+                    )}
                     <Cell className="font-bold">{line.hsn}</Cell>
                     <Cell className="font-bold">{line.boxes}</Cell>
                     <Cell className="font-bold">{Number(line.quantity) || 0}</Cell>
@@ -275,7 +290,7 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
               })}
               {Array.from({ length: blanks }, (_, row) => (
                 <tr key={`blank-${row}`}>
-                  {Array.from({ length: 14 }, (_, i) => (
+                  {Array.from({ length: columnCount }, (_, i) => (
                     <Cell key={i}>&nbsp;</Cell>
                   ))}
                 </tr>
@@ -283,9 +298,13 @@ export function InvoicePrint({ invoice, bank, company: fromSettings, copy, headi
               <tr>
                 <Cell />
                 <Cell className="text-left font-bold">TOTAL NAG = {invoice.packages || ''}</Cell>
-                <Cell />
-                <Cell />
-                <Cell />
+                {show.batches && (
+                  <>
+                    <Cell />
+                    <Cell />
+                    <Cell />
+                  </>
+                )}
                 <Cell />
                 <Cell />
                 <Cell className="font-bold">{totalQty}</Cell>

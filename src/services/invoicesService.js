@@ -16,6 +16,12 @@ export async function getInvoice(id) {
   return data.data.invoice
 }
 
+/** A bill number to offer; the admin may type their own over it. */
+export async function nextInvoiceNo() {
+  const { data } = await api.get('/invoices/next-number')
+  return data.data.number
+}
+
 export async function createInvoice(form) {
   const { data } = await api.post('/invoices', form)
   return { invoice: data.data.invoice, message: data.message }

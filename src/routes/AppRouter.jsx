@@ -28,6 +28,7 @@ const Visited = lazy(() => import('@/components/Parties/Visited/Visited'))
 const Distributors = lazy(() => import('@/components/Parties/Distributors/Distributors'))
 const Estimates = lazy(() => import('@/components/Sales/Estimates/Estimates'))
 const SalesOrders = lazy(() => import('@/components/Sales/SalesOrders/SalesOrders'))
+const OrderEditor = lazy(() => import('@/components/Sales/SalesOrders/OrderEditor'))
 const SalesInvoices = lazy(() => import('@/components/Sales/Invoices/Invoices'))
 const InvoiceEditor = lazy(() => import('@/components/Sales/Invoices/InvoiceEditor'))
 const InvoicePrintPage = lazy(() => import('@/components/Sales/Invoices/InvoicePrintPage'))
@@ -106,9 +107,16 @@ function Lazy({ page: Page, ...props }) {
   )
 }
 
-/** Create / edit routes for every sales and purchase document type. */
+/**
+ * Create / edit routes for the document types that still run on the shared
+ * mock editor. Sales invoices and sales orders are left out: each has a real
+ * editor of its own, declared above, and two routes for one path would leave
+ * which editor opens up to the order they happen to be declared in.
+ */
+const ON_MOCKS = Object.values(DOC_TYPES).filter(({ type }) => type !== 'SALES_INVOICE' && type !== 'SALES_ORDER')
+
 const salesEditorRoutes = () =>
-  Object.values(DOC_TYPES).flatMap(({ type, basePath }) => [
+  ON_MOCKS.flatMap(({ type, basePath }) => [
     <Route key={`${type}-new`} path={`${basePath}/new`} element={<Lazy page={TransactionEditorPage} type={type} />} />,
     <Route key={`${type}-edit`} path={`${basePath}/:docId/edit`} element={<Lazy page={TransactionEditorPage} type={type} />} />,
   ])
@@ -156,6 +164,10 @@ export function AppRouter() {
             <Route path="/admin/inventory/price-lists/:priceListId/edit" element={<Lazy page={PriceListEditor} />} />
             <Route path="/admin/sales/invoices/new" element={<Lazy page={InvoiceEditor} />} />
             <Route path="/admin/sales/invoices/:invoiceId/edit" element={<Lazy page={InvoiceEditor} />} />
+            {/* Before salesEditorRoutes(), which would otherwise hand sales
+                orders to the mock editor every other document type still uses. */}
+            <Route path="/admin/sales/orders/new" element={<Lazy page={OrderEditor} />} />
+            <Route path="/admin/sales/orders/:orderId/edit" element={<Lazy page={OrderEditor} />} />
             <Route path="/admin/sales/credit-notes/new" element={<Lazy page={CreditNoteEditor} />} />
             <Route path="/admin/sales/credit-notes/:noteId/edit" element={<Lazy page={CreditNoteEditor} />} />
             {salesEditorRoutes()}

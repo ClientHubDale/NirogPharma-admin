@@ -49,7 +49,25 @@ function NumberCell({ value, onChange, label, prefix, invalid, readOnly, width =
  * carry `forItemId` — the line that earned them — so each badge sits under the
  * product it belongs to.
  */
-export function InvoiceLines({ freebies = [], form, errors, items, batchesFor, onChange, tier, tiers, disabled, interState = false, taxRate }) {
+/**
+ * `batches` is off for a document that picks none. A sales order promises
+ * goods and reserves nothing, so its lines have no Batch, Mfd. or Exp. cell
+ * — those belong to the bill, which is where stock actually moves.
+ */
+export function InvoiceLines({
+  freebies = [],
+  form,
+  errors,
+  items,
+  batchesFor = () => [],
+  onChange,
+  tier,
+  tiers,
+  disabled,
+  interState = false,
+  taxRate,
+  batches: showBatches = true,
+}) {
   // The headers name the rate, the same way the printed bill does.
   const pct = (value) => String(Number(Number(value).toFixed(2)))
   const rates = [...new Set(form.lines.filter((l) => l.itemId).map((l) => Number(items.find((i) => i.id === l.itemId)?.gst) || 0))]
@@ -89,9 +107,13 @@ export function InvoiceLines({ freebies = [], form, errors, items, batchesFor, o
             <tr className="border-b border-mint-pale bg-bg text-center text-[10px] font-bold tracking-wide text-ink-muted uppercase">
               <th className="w-10 px-2 py-2">S.<br />No</th>
               <th className="px-2 py-2 text-left">Description of goods</th>
-              <th className="min-w-[14rem] px-2 py-2">Batch No.</th>
-              <th className="w-16 px-1 py-2">Mfd.</th>
-              <th className="w-16 px-1 py-2">Exp.</th>
+              {showBatches && (
+                <>
+                  <th className="min-w-[14rem] px-2 py-2">Batch No.</th>
+                  <th className="w-16 px-1 py-2">Mfd.</th>
+                  <th className="w-16 px-1 py-2">Exp.</th>
+                </>
+              )}
               <th className="w-20 px-1 py-2">HSN<br />Code</th>
               <th className="w-12 px-1 py-2">Qty.<br />(in box)</th>
               <th className="w-24 px-1 py-2">UOM<br />(in bottle)</th>
@@ -109,7 +131,7 @@ export function InvoiceLines({ freebies = [], form, errors, items, batchesFor, o
           <tbody className="divide-y divide-mint-pale">
             {lines.length === 0 && (
               <tr>
-                <td colSpan={15} className={cn('px-4 py-12 text-center text-sm', errors.lines_empty ? 'text-destructive' : 'text-ink-muted')}>
+                <td colSpan={showBatches ? 15 : 12} className={cn('px-4 py-12 text-center text-sm', errors.lines_empty ? 'text-destructive' : 'text-ink-muted')}>
                   <PackageSearch className="mx-auto mb-2 size-7 text-green-deep" strokeWidth={1.5} />
                   {errors.lines_empty ?? 'No items added yet. Search below to add your first item.'}
                 </td>
@@ -169,6 +191,8 @@ export function InvoiceLines({ freebies = [], form, errors, items, batchesFor, o
                     </p>
                     {problem.quantity && <p className="text-xs font-medium text-destructive">{problem.quantity}</p>}
                   </td>
+                  {showBatches && (
+                    <>
                   <td className="px-3 py-2.5 align-top">
                     <div className="space-y-2">
                       {line.batches.map((row, at) => {
@@ -230,10 +254,11 @@ export function InvoiceLines({ freebies = [], form, errors, items, batchesFor, o
                       {problem.batches && <p className="text-xs font-medium text-destructive">{problem.batches}</p>}
                     </div>
                   </td>
-
                   {/* Taken from the batch and the item, never typed again. */}
                   <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">{monthYear(firstBatch?.mfgDate)}</td>
                   <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">{monthYear(firstBatch?.expiryDate)}</td>
+                    </>
+                  )}
                   <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">{item?.hsn || '—'}</td>
                   <td className="px-1 py-2.5 text-center align-top font-mono text-xs text-ink-muted">1</td>
                   <td className="px-1 py-2.5 align-top">
