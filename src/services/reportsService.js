@@ -21,4 +21,14 @@ export async function salesByManager(params = {}) {
   return data.data
 }
 
+/**
+ * Executive Secondary — what the field booked this month against its target.
+ * Secondary sales are the orders the executive books at the shop or the
+ * doctor, which the distributor then fulfils.
+ */
+export async function executiveSecondary(params = {}) {
+  const { data } = await api.get('/reports/executive-secondary', query(params))
+  return data.data
+}
+
 export { errorFrom } from './usersService'

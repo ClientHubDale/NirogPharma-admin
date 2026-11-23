@@ -1,0 +1,1 @@
+export { RemindersDetail } from './RemindersDetail'

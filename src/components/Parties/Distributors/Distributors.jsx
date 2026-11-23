@@ -18,8 +18,9 @@ import { tierLabels } from '@/constants/priceTiers'
 import { usePriceTiers } from '@/hooks/usePriceTiers'
 import { cn } from '@/lib/utils'
 import { googleMapsUrl } from '@/lib/geo'
+import * as visitsService from '@/services/visitsService'
 import * as paymentsService from '@/services/paymentsService'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatShortDate } from '@/lib/format'
 import { selectCities, selectRegions, selectRoutes } from '@/store/geographySlice'
 import {
   fetchDistributors,
@@ -72,6 +73,10 @@ export default function Distributors() {
   const [saving, setSaving] = useState(false)
   /// What each firm owes, keyed by distributor id. Empty until it loads.
   const [accounts, setAccounts] = useState({})
+  /// How often each firm was called on lately, keyed the same way. The client
+  /// asked for this beside the manager who owns them — a firm nobody visits
+  /// is the manager's business.
+  const [visits, setVisits] = useState({})
 
   // Managers and executives come from Users — the same list the user form uses.
   useEffect(() => {
@@ -94,6 +99,17 @@ export default function Distributors() {
       .accounts()
       .then((rows) => alive && setAccounts(Object.fromEntries(rows.map((row) => [row.distributorId, row]))))
       .catch(() => alive && setAccounts({}))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+    visitsService
+      .counts()
+      .then((found) => alive && setVisits(found.counts ?? {}))
+      .catch(() => alive && setVisits({}))
     return () => {
       alive = false
     }
@@ -228,6 +244,22 @@ export default function Distributors() {
           header: 'Manager',
           cell: (i) => <span className="text-ink uppercase">{i.getValue() || '—'}</span>,
         }),
+        helper.accessor((d) => visits[d.id]?.visits ?? 0, {
+          id: 'visits',
+          header: 'Manager visits',
+          meta: { align: 'right' },
+          cell: ({ row, getValue }) => {
+            const count = getValue()
+            const last = visits[row.original.id]?.lastVisitedAt
+            return (
+              <span className="block text-right">
+                {/* Zero is the figure worth seeing, so it is the one in red. */}
+                <span className={cn('font-mono tabular-nums', count === 0 ? 'font-semibold text-danger' : 'text-ink')}>{count}</span>
+                {last && <span className="block text-[10px] text-ink-muted">{formatShortDate(last)}</span>}
+              </span>
+            )
+          },
+        }),
         helper.accessor((d) => d.executives?.[0]?.name ?? '', {
           id: 'executive',
           header: 'Executive',
@@ -354,7 +386,7 @@ export default function Distributors() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [page.pageIndex, page.pageSize, distributors, cities, areas, accounts],
+    [page.pageIndex, page.pageSize, distributors, cities, areas, accounts, visits],
   )
 
   return (

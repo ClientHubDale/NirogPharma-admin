@@ -26,10 +26,15 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { WelcomeHeader } from '@/components/dashboard/WelcomeHeader'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ManagerSalesDetail } from '@/components/dashboard/ManagerSalesDetail'
+import { RemindersDetail } from '@/components/dashboard/RemindersDetail'
+import { VisitDetail } from '@/components/dashboard/VisitDetail'
+import { SecondaryDetail } from '@/components/dashboard/SecondaryDetail'
 import { DateRangeFilter } from '@/components/form/DateRangeFilter'
 import { Modal } from '@/components/common/Modal'
 import { Button } from '@/components/ui/button'
+import * as remindersService from '@/services/remindersService'
 import * as reportsService from '@/services/reportsService'
+import * as visitsService from '@/services/visitsService'
 import * as distributorsService from '@/services/distributorsService'
 import { PartyDues } from '@/components/Finance/Outstanding/PartyDues'
 import { presetRange } from '@/lib/dateRange'
@@ -41,7 +46,6 @@ import {
   adminSetupSteps,
   attentionItems,
   creditNotes,
-  distributorVisits,
   salesTrend,
   VISIT_TARGET_PER_MONTH,
 } from '@/mocks/dashboard'
@@ -89,6 +93,39 @@ export default function AdminDashboard() {
   /// Firms put on the books lately, to be grouped under whoever added them.
   const [firms, setFirms] = useState([])
   const [openAdder, setOpenAdder] = useState(null)
+
+  /// Bills past thirty days, and whether the reminder list is open. Asking
+  /// for this is also what raises the nudges that have come due, so the
+  /// figure and the chasing stay in step without a scheduler.
+  const [nudges, setNudges] = useState(null)
+  const [remindersOpen, setRemindersOpen] = useState(false)
+
+  /// Executive Secondary: what the field booked this month against target.
+  const [secondary, setSecondary] = useState(null)
+  const [secondaryOpen, setSecondaryOpen] = useState(false)
+
+  /// Visits down the firms, and whether the detail is open.
+  const [visits, setVisits] = useState(null)
+  const [visitsOpen, setVisitsOpen] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    remindersService
+      .overdue()
+      .then((found) => alive && setNudges(found))
+      .catch(() => alive && setNudges(null))
+    reportsService
+      .executiveSecondary()
+      .then((found) => alive && setSecondary(found))
+      .catch(() => alive && setSecondary(null))
+    visitsService
+      .report()
+      .then((found) => alive && setVisits(found))
+      .catch(() => alive && setVisits(null))
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -280,17 +317,26 @@ export default function AdminDashboard() {
           ) : (
             <p className="py-6 text-center text-sm text-ink-muted">{dues ? 'Nothing is standing unpaid.' : 'Adding up the dues…'}</p>
           )}
-          <Link
-            to="/admin/finance/outstanding"
+          {/* The manager and the executive hear automatically once a bill
+              passes thirty days; the firm hears only when the office ticks it
+              and presses Send. */}
+          <button
+            type="button"
+            onClick={() => setRemindersOpen(true)}
             className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-green-deep hover:underline hover:underline-offset-4"
+            data-testid="open-reminders"
           >
-            <Send className="size-3.5" /> Send reminders
-          </Link>
+            <Send className="size-3.5" />
+            {nudges
+              ? `Send reminders — ${nudges.bills.length} bill${nudges.bills.length === 1 ? '' : 's'} past ${nudges.afterDays} days`
+              : 'Send reminders'}
+          </button>
         </DashboardCard>
       </div>
 
-      {/* Manager-wise sales. Executive Secondary comes in beside it, which is
+      {/* Manager-wise sales, with Executive Secondary beside it — which is
           why Distributor outstanding has moved out of this row and below. */}
+      <div className="grid gap-6 xl:grid-cols-2">
       <DashboardCard
         title={`Manager-wise sales${managerReport ? ` — ${managerReport.label}` : ''}`}
         action={{ label: 'View sales', onClick: () => setManagersOpen(true) }}
@@ -317,6 +363,56 @@ export default function AdminDashboard() {
           <p className="py-6 text-center text-sm text-ink-muted">Adding up the month…</p>
         )}
       </DashboardCard>
+
+      {/**
+       * Executive Secondary — what the field booked, against what they were
+       * asked for. The target is only half the story: the client reads it
+       * against the calendar — "आज पंद्रह तारीख है, इतना कर लिया, इतना बाकी
+       * है" — so each row says whether they are ahead of where the month has
+       * got to, not merely what percentage they have reached.
+       */}
+      <DashboardCard
+        title={`Executive Secondary${secondary ? ` — ${secondary.label}` : ''}`}
+        meta={
+          secondary ? (
+            <p className="shrink-0 text-sm text-ink-muted">
+              Day {secondary.asOfDay}/{secondary.daysInMonth}
+            </p>
+          ) : null
+        }
+        action={{ label: 'View all', onClick: () => setSecondaryOpen(true) }}
+      >
+        {secondary ? (
+          secondary.executives.length ? (
+            <>
+              <BarList
+                rows={secondary.executives.map((person) => ({
+                  id: person.executiveId || 'none',
+                  label: person.executiveName,
+                  sublabel:
+                    person.target > 0
+                      ? `${person.percent}% of ${formatINRCompact(person.target)} · ${formatINRCompact(person.remaining)} left`
+                      : `${person.orders} order${person.orders === 1 ? '' : 's'}`,
+                  value: formatINRCompact(person.booked),
+                  percent: person.target > 0 ? Math.min(100, person.percent ?? 0) : 0,
+                  /// Behind where the calendar says they should be shows red.
+                  tone: person.onTrack === null ? 'neutral' : person.onTrack ? 'success' : 'danger',
+                  onClick: () => setSecondaryOpen(true),
+                }))}
+              />
+              <p className="mt-3 text-xs text-ink-muted">
+                {secondary.elapsed}% of the month gone. Press a name for the orders, the shop or doctor behind each, and whether the
+                distributor has sent them out.
+              </p>
+            </>
+          ) : (
+            <p className="py-6 text-center text-sm text-ink-muted">Nothing has been booked this month.</p>
+          )
+        ) : (
+          <p className="py-6 text-center text-sm text-ink-muted">Adding up the month…</p>
+        )}
+      </DashboardCard>
+      </div>
 
       {/**
        * Distributor outstanding, moved down from beside Manager-wise sales —
@@ -445,21 +541,55 @@ export default function AdminDashboard() {
         </ul>
       </DashboardCard>
 
-      {/* Visits */}
+      {/**
+       * Visits, on real records at last.
+       *
+       * This card showed sample data from the mock file while nothing anywhere
+       * recorded a visit — the client was reading a number that meant nothing.
+       * It now reads what the field app sends, and "View routes", which went to
+       * the areas screen and answered a different question, has become
+       * **Details**: a manager, a stretch of days, and the firms nobody reached.
+       */}
       <DashboardCard
-        title="Distributor visits — this month"
-        meta={<p className="hidden text-sm text-ink-muted sm:block">Target {VISIT_TARGET_PER_MONTH} visits</p>}
-        action={{ label: 'View routes', to: '/admin/routes/areas' }}
+        title="Distributor visits — last 30 days"
+        meta={
+          visits ? (
+            <p className="hidden text-sm text-ink-muted sm:block">
+              {visits.visited} of {visits.firms} firms
+            </p>
+          ) : null
+        }
+        action={{ label: 'Details', onClick: () => setVisitsOpen(true) }}
       >
-        <BarList
-          rows={distributorVisits.map((d) => ({
-            id: d.id,
-            label: d.name,
-            value: `${d.visits} visits`,
-            percent: asPercent(d.visits, VISIT_TARGET_PER_MONTH),
-            tone: toneForVisits(d.visits, VISIT_TARGET_PER_MONTH),
-          }))}
-        />
+        {visits ? (
+          visits.rows.length ? (
+            <>
+              <BarList
+                rows={visits.rows.slice(0, 6).map((row) => ({
+                  id: row.distributorId,
+                  label: row.distributorName,
+                  sublabel: row.managerName || undefined,
+                  value: `${row.visits} visit${row.visits === 1 ? '' : 's'}`,
+                  percent: asPercent(row.visits, Math.max(1, ...visits.rows.map((other) => other.visits))),
+                  tone: toneForVisits(row.visits, VISIT_TARGET_PER_MONTH),
+                  onClick: () => setVisitsOpen(true),
+                }))}
+              />
+              {visits.notVisited.length > 0 && (
+                /* The ones nobody reached matter more than the ones they did. */
+                <p className="mt-3 text-xs font-semibold text-danger">
+                  {visits.notVisited.length} firm{visits.notVisited.length === 1 ? '' : 's'} saw nobody — press Details.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="py-6 text-center text-sm text-ink-muted">
+              No visits have been recorded yet. The field app is what records them.
+            </p>
+          )
+        ) : (
+          <p className="py-6 text-center text-sm text-ink-muted">Reading the visits…</p>
+        )}
       </DashboardCard>
 
       {/* Needs attention */}
@@ -477,6 +607,24 @@ export default function AdminDashboard() {
       <PartyDues firm={openFirm} onClose={() => setOpenFirm(null)} />
 
       <ManagerSalesDetail report={managerReport} open={managersOpen} onClose={() => setManagersOpen(false)} />
+
+      <RemindersDetail
+        open={remindersOpen}
+        onClose={() => setRemindersOpen(false)}
+        onSent={() => remindersService.overdue().then(setNudges).catch(() => {})}
+      />
+
+      <SecondaryDetail report={secondary} open={secondaryOpen} onClose={() => setSecondaryOpen(false)} />
+
+      <VisitDetail
+        open={visitsOpen}
+        onClose={() => setVisitsOpen(false)}
+        /// The managers to choose between come from the sales report, which
+        /// already names every one of them.
+        managers={(managerReport?.managers ?? [])
+          .filter((manager) => manager.managerId)
+          .map((manager) => ({ id: manager.managerId, name: manager.managerName }))}
+      />
 
       {/* Any stretch of days, for when the six months on offer are not the
           ones being asked about. */}

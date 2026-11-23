@@ -51,6 +51,10 @@ const FIELD_IDS = {
 const FIELD =
   'w-full rounded-[2px] border border-black/40 bg-white px-1 py-px text-[9px] outline-none focus:border-green-deep disabled:border-black/20 disabled:bg-bg disabled:text-ink-muted'
 
+/// The same input, sized for a normal card rather than for paper.
+const SCREEN_FIELD =
+  'w-full rounded-lg border border-mint bg-white px-3 py-2 text-sm outline-none focus:border-green-deep disabled:bg-bg disabled:text-ink-muted'
+
 /**
  * Booking an order.
  *
@@ -511,6 +515,61 @@ export default function OrderEditor() {
         }
         onLots={(id, n) => setLots((was) => ({ ...was, [id]: Math.max(1, n) }))}
       />
+
+      {/**
+       * Where the order was actually booked.
+       *
+       * This is what makes an order *secondary* sales: the executive stands in
+       * a clinic or a shop and books there, and the distributor above is who
+       * fulfils it and who we bill. The Executive Secondary card on the
+       * dashboard reads these two fields, and the client asked for the shop or
+       * doctor and their number as columns of their own.
+       *
+       * It sits outside the sheet and off the paper on purpose. The printed
+       * order is the one the distributor gets, and who the goods were sold on
+       * to is ours to know, not theirs to read.
+       */}
+      <div className="rounded-2xl border border-mint-pale bg-white p-4 print:hidden sm:p-5">
+        {/* Sized for the screen, not the sheet: FIELD above is the 9px style
+            the paper inputs use, which is unreadable in a normal card. */}
+        <h2 className="mb-1 text-sm font-semibold text-black">Booked at</h2>
+        <p className="mb-3 text-xs text-ink-muted">
+          The shop or doctor this order was taken from. Leave it empty for an order the office typed itself.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="order-shop-name" className="block text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
+              Shop / Doctor
+            </label>
+            <input
+              id="order-shop-name"
+              type="text"
+              value={form.shopName}
+              onChange={(e) => update('shopName', e.target.value)}
+              disabled={locked}
+              placeholder="Dr. Sharma Clinic"
+              maxLength={120}
+              className={SCREEN_FIELD}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="order-shop-mobile" className="block text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
+              Their mobile
+            </label>
+            <input
+              id="order-shop-mobile"
+              type="tel"
+              inputMode="numeric"
+              value={form.shopMobile}
+              onChange={(e) => update('shopMobile', e.target.value)}
+              disabled={locked}
+              placeholder="98765 43210"
+              maxLength={20}
+              className={SCREEN_FIELD}
+            />
+          </div>
+        </div>
+      </div>
 
       {/**
        * `bill-sheet` is the id the print stylesheet dresses for paper: it

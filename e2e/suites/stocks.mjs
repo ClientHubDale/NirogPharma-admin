@@ -49,16 +49,63 @@ const openRowMenu = async (label) => {
   await sleep(300)
 }
 
+/**
+ * The bill number this suite puts on its issue-and-return pair.
+ *
+ * It is also the only trace left on the credit note that the return raises,
+ * which is why the clean-up below sweeps on it. The return is deliberately
+ * made against whatever real batch has stock, so the note it raises names a
+ * real product — matching on the suite's own item names can never find it.
+ */
+const RETURN_BILL = 'E2E/RET-CHECK'
+
+/**
+ * Take away the credit note that the issue-and-return pair raises.
+ *
+ * The return is made against a real batch on purpose, so the note it raises
+ * names a real product and carries nothing of this suite but the bill number
+ * — which is why that number is the only safe thing to match on.
+ */
+const dropReturnNote = async () => {
+  for (const note of (await api('/credit-notes?limit=300')).data?.notes ?? []) {
+    if (note.againstInvoiceNo !== RETURN_BILL) continue
+    // An issued note has moved stock and credited a firm, so cancelling comes
+    // first — that is what puts both back. Deleting it outright is refused.
+    if (note.status !== 'PENDING' && note.status !== 'CANCELLED') {
+      await api(`/credit-notes/${note.id}/cancel`, { method: 'POST' })
+    }
+    await api(`/credit-notes/${note.id}`, { method: 'DELETE' })
+  }
+}
+
 const cleanup = async () => {
-  // A return raises a credit note, and an item on a credit note cannot be
-  // deleted — so the notes this suite raised go first, or the next run finds
-  // its item still here and cannot seed.
+  /**
+   * A return raises a credit note, and a product on a credit note cannot be
+   * deleted — so the notes this suite raised go first, or the next run finds
+   * its item still here and cannot seed.
+   *
+   * Two things were wrong here, and between them they put thirty-seven test
+   * credit notes worth ₹38,115 of issued credit on the client's real books,
+   * one per run from the end of October until they were found.
+   *
+   * The notes were matched by the suite's own item names, but the return at
+   * `RETURN_BILL` is made against a real batch on purpose, so its note names a
+   * real product and was never matched at all. And an **issued** note refuses
+   * to be deleted — it has moved stock and credited a firm — so it has to be
+   * cancelled first, which puts both back.
+   */
   const ours = new Set(
     ((await api('/items?limit=200')).data?.items ?? []).filter((item) => item.code?.startsWith('E2E-STK')).map((item) => item.name),
   )
-  for (const note of (await api('/credit-notes?limit=200')).data?.notes ?? []) {
-    if (ours.has(note.itemName)) await api(`/credit-notes/${note.id}`, { method: 'DELETE' })
+  for (const note of (await api('/credit-notes?limit=300')).data?.notes ?? []) {
+    if (!ours.has(note.itemName)) continue
+    // A note is cancelled through its own route, not a status patch.
+    if (note.status !== 'PENDING' && note.status !== 'CANCELLED') {
+      await api(`/credit-notes/${note.id}/cancel`, { method: 'POST' })
+    }
+    await api(`/credit-notes/${note.id}`, { method: 'DELETE' })
   }
+  await dropReturnNote()
   for (const item of (await api('/items?limit=200')).data?.items ?? []) {
     if (item.code?.startsWith('E2E-STK')) await api(`/items/${item.id}`, { method: 'DELETE' })
   }
@@ -738,7 +785,7 @@ const before = await figuresOf(anyBatch.itemName)
 ok('the product being issued from has a row on the factory screen', before.found, anyBatch.itemName)
 await api('/stocks/issue', {
   method: 'POST',
-  body: JSON.stringify({ distributorId: anyFirm.id, invoiceNo: 'E2E/RET-CHECK', lines: [{ batchId: anyBatch.id, quantity: 5 }] }),
+  body: JSON.stringify({ distributorId: anyFirm.id, invoiceNo: RETURN_BILL, lines: [{ batchId: anyBatch.id, quantity: 5 }] }),
 })
 // By item name, like the row above: the factory screen groups by product,
 // so searching a batch number finds nothing to compare against.
@@ -751,8 +798,17 @@ ok('…and lands in Out instead', after.out !== before.out, `${before.out} → $
 // suite asserts on.
 await api('/stocks/return', {
   method: 'POST',
-  body: JSON.stringify({ batchId: anyBatch.id, distributorId: anyFirm.id, quantity: 5, invoiceNo: 'E2E/RET-CHECK' }),
+  body: JSON.stringify({ batchId: anyBatch.id, distributorId: anyFirm.id, quantity: 5, invoiceNo: RETURN_BILL }),
 })
+
+// Straight away, not at the end: the suite's own clean-up has already run by
+// the time this section is reached, so a note left here would sit on the
+// client's books until somebody happened to run this suite again.
+await dropReturnNote()
+ok(
+  'the return takes its credit note with it',
+  !((await api('/credit-notes?limit=300')).data?.notes ?? []).some((note) => note.againstInvoiceNo === RETURN_BILL),
+)
 
 
 /* ── the admin's own credit note number ───────────────────────────────── */
@@ -804,7 +860,7 @@ const wipeValue = async () => {
   for (const row of (await api('/credit-notes?limit=300')).data?.notes ?? []) {
     if (!(row.lines ?? []).some((line) => line.itemCode === VAL.code)) continue
     if (row.status !== 'PENDING' && row.status !== 'CANCELLED') {
-      await api(`/credit-notes/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) })
+      await api(`/credit-notes/${row.id}/cancel`, { method: 'POST' })
     }
     await api(`/credit-notes/${row.id}`, { method: 'DELETE' })
   }

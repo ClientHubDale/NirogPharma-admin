@@ -47,6 +47,12 @@ export const emptyOrderForm = (defaults = {}) => ({
   station: '',
   packages: '',
   shipTo: '',
+  /// The shop or doctor the order was booked from, and their number. This is
+  /// what makes an order secondary sales: the executive books at the shop,
+  /// the distributor fulfils it, and both have to be on the record for the
+  /// Executive Secondary figures to mean anything.
+  shopName: '',
+  shopMobile: '',
   note: '',
   terms: '',
   lines: [emptyLine()],
@@ -64,6 +70,8 @@ export const orderToForm = (order) => ({
   station: order.station ?? '',
   packages: order.packages === '' || order.packages == null ? '' : String(order.packages),
   shipTo: order.shipTo ?? '',
+  shopName: order.shopName ?? '',
+  shopMobile: order.shopMobile ?? '',
   note: order.note ?? '',
   terms: order.terms ?? '',
   lines: order.lines.map((line) => ({ itemId: line.itemId, quantity: String(line.quantity), batches: [] })),
@@ -80,6 +88,8 @@ export const formToPayload = (form) => ({
   station: form.station.trim(),
   packages: form.packages.trim(),
   shipTo: form.shipTo.trim(),
+  shopName: form.shopName.trim(),
+  shopMobile: form.shopMobile.trim(),
   note: form.note.trim(),
   terms: form.terms.trim(),
   lines: form.lines.filter((line) => line.itemId).map((line) => ({ itemId: line.itemId, quantity: Number(line.quantity) })),
@@ -97,8 +107,7 @@ export function validateOrderForm(form) {
 
   if (!form.distributorId) errors.distributorId = 'Choose the customer.'
   if (!form.orderDate) errors.orderDate = 'Pick the date.'
-  if (form.creditDays !== '' && (!isNumber(form.creditDays) || Number(form.creditDays) < 0))
-    errors.creditDays = 'Enter a number of days.'
+  if (form.creditDays !== '' && (!isNumber(form.creditDays) || Number(form.creditDays) < 0)) errors.creditDays = 'Enter a number of days.'
 
   const filled = form.lines.filter((line) => line.itemId)
   if (!filled.length) errors.lines_empty = 'Add at least one item.'
