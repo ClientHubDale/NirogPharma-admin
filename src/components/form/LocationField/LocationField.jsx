@@ -13,7 +13,15 @@ import { cn } from '@/lib/utils'
  *
  * value: { name, lat, lng } — lat/lng are numbers or null.
  */
-export function LocationField({ id, label = 'Location', required, value, onChange, error, className, hint }) {
+/**
+ * `autoLocate` takes the device's position the moment the field appears with
+ * nothing in it — "अपने आप से लोकेशन सेट कर ले". A new distributor is added
+ * standing in their shop, so asking someone to press a button for a point
+ * the phone already knows is a step that earns nothing. It never overwrites
+ * a location that is already set, and a refusal is silent: the button is
+ * still there to press.
+ */
+export function LocationField({ id, label = 'Location', required, value, onChange, error, className, hint, autoLocate = false }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -56,7 +64,7 @@ export function LocationField({ id, label = 'Location', required, value, onChang
     setQuery('')
   }
 
-  const useCurrentLocation = () => {
+  const takeCurrentLocation = () => {
     if (!navigator.geolocation) return setNote('This browser cannot share a location.')
     setLocating(true)
     setNote('')
@@ -81,6 +89,17 @@ export function LocationField({ id, label = 'Location', required, value, onChang
       { enableHighAccuracy: true, timeout: 10000 },
     )
   }
+
+  // Once, and only into an empty field.
+  const askedRef = useRef(false)
+  useEffect(() => {
+    if (!autoLocate || askedRef.current || picked) return
+    askedRef.current = true
+    takeCurrentLocation()
+    // One shot on mount; re-running it on every render would ask the device
+    // over and over.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLocate, picked])
 
   return (
     <div className={className}>
@@ -186,7 +205,7 @@ export function LocationField({ id, label = 'Location', required, value, onChang
 
         <button
           type="button"
-          onClick={useCurrentLocation}
+          onClick={takeCurrentLocation}
           disabled={locating}
           className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg border border-mint bg-bg px-3.5 text-sm font-semibold text-green-deep hover:bg-mint-pale disabled:opacity-60"
         >

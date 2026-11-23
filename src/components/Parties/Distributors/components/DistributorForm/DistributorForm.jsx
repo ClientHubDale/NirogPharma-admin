@@ -14,7 +14,7 @@ import { DISTRIBUTOR_STATUSES, WEEK_DAYS } from '../../distributorModel'
  * the manager (implicit there, because a manager creates it) and the status and
  * target the admin panel needs.
  */
-export function DistributorForm({ form, errors, onChange, managers, executives, regions, cities, areas }) {
+export function DistributorForm({ form, errors, onChange, managers, executives, regions, cities, areas, autoLocate = false }) {
   const priceTiers = usePriceTiers()
   const set = (field) => (e) => onChange(field, e.target.value)
   const digits = (value) => value.replace(/\D/g, '')
@@ -180,6 +180,13 @@ export function DistributorForm({ form, errors, onChange, managers, executives, 
           }}
           hint="Search for the shop, or press Use current location while you are standing there."
           error={errors.locationName}
+          /**
+           * Off in the panel, on purpose. The office is not the shop: taking
+           * the admin's own position would stamp the building they are
+           * sitting in onto a firm fifty kilometres away. The field app,
+           * where the person is standing in front of the shop, passes this.
+           */
+          autoLocate={autoLocate}
         />
         <TextField id="dist-transport" label="Transport" size="md" placeholder="e.g. VRL Logistics" maxLength={60} value={form.transport} onChange={set('transport')} />
         <SelectField
@@ -275,6 +282,16 @@ export function DistributorForm({ form, errors, onChange, managers, executives, 
       <FormSection title="Shop Photo & Signature" description="Taken when the distributor is appointed.">
         <ImageUploader label="Shop photo" images={form.shopPhoto} onChange={(images) => onChange('shopPhoto', images)} max={1} />
         <ImageUploader label="Signature" images={form.signature} onChange={(images) => onChange('signature', images)} max={1} />
+        {/* Identity proof, photographed on the spot — "आधार का फोटो खींच के
+            डाले". Both sides, because the card says different things on each
+            and the office files the pair with the printed form. */}
+        <ImageUploader
+          label="Aadhaar — front"
+          images={form.aadhaarFront}
+          onChange={(images) => onChange('aadhaarFront', images)}
+          max={1}
+        />
+        <ImageUploader label="Aadhaar — back" images={form.aadhaarBack} onChange={(images) => onChange('aadhaarBack', images)} max={1} />
       </FormSection>
     </div>
   )

@@ -33,6 +33,7 @@ const SalesInvoices = lazy(() => import('@/components/Sales/Invoices/Invoices'))
 const InvoiceEditor = lazy(() => import('@/components/Sales/Invoices/InvoiceEditor'))
 const InvoicePrintPage = lazy(() => import('@/components/Sales/Invoices/InvoicePrintPage'))
 const CreditNotePrintPage = lazy(() => import('@/components/Sales/CreditNotes/CreditNotePrintPage'))
+const DistributorFormPrint = lazy(() => import('@/pages/admin/DistributorFormPrint'))
 const CreditNoteEditor = lazy(() => import('@/components/Sales/CreditNotes/CreditNoteEditor'))
 const DeliveryChallans = lazy(() => import('@/components/Sales/DeliveryChallans/DeliveryChallans'))
 const CreditNotes = lazy(() => import('@/components/Sales/CreditNotes/CreditNotes'))
@@ -151,6 +152,8 @@ export function AppRouter() {
         <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>
           <Route path="/admin/sales/invoices/:invoiceId/print" element={<Lazy page={InvoicePrintPage} />} />
           <Route path="/admin/sales/credit-notes/:noteId/print" element={<Lazy page={CreditNotePrintPage} />} />
+          {/* The distributor's own form, to print and put in the file. */}
+          <Route path="/admin/parties/distributors/:distributorId/form" element={<Lazy page={DistributorFormPrint} />} />
           <Route path="/distributor/credit-notes/:noteId/print" element={<Lazy page={CreditNotePrintPage} />} />
         </Route>
 

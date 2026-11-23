@@ -30,8 +30,16 @@ const api = (path, init = {}) =>
   }).then((r) => r.json())
 
 const cleanup = async () => {
+  /**
+   * An issued note refuses to be deleted — it has already moved stock and
+   * credited a firm, so it is cancelled first, which puts both back. Without
+   * that step this suite left every note it ever issued on the books, and
+   * they quietly piled up as credit against a real distributor.
+   */
   for (const note of (await api('/credit-notes?limit=300')).data?.notes ?? []) {
-    if ([ITEM.name, SOLD.name].includes(note.itemName)) await api(`/credit-notes/${note.id}`, { method: 'DELETE' })
+    if (![ITEM.name, SOLD.name].includes(note.itemName)) continue
+    if (note.status === 'ISSUED') await api(`/credit-notes/${note.id}/cancel`, { method: 'POST' })
+    await api(`/credit-notes/${note.id}`, { method: 'DELETE' })
   }
   // The bill goes before its batch: an issued bill is holding stock out, and
   // an issued bill has to be cancelled before it can be deleted at all.

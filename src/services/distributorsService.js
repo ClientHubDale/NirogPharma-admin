@@ -40,6 +40,8 @@ function bodyFor(form) {
   const files = [
     ['shopPhoto', form.shopPhoto?.find((image) => image.file)?.file],
     ['signature', form.signature?.find((image) => image.file)?.file],
+    ['aadhaarFront', form.aadhaarFront?.find((image) => image.file)?.file],
+    ['aadhaarBack', form.aadhaarBack?.find((image) => image.file)?.file],
   ].filter(([, file]) => file)
 
   if (!files.length) return { data: { ...fields, executiveIds } }
@@ -54,6 +56,12 @@ function bodyFor(form) {
 export async function listDistributors(params = {}) {
   const { data } = await api.get('/distributors', { params: { limit: 100, ...params } })
   return { distributors: data.data.distributors, meta: data.meta }
+}
+
+/** One firm, for the form the office prints and files. */
+export async function getDistributor(id) {
+  const { data } = await api.get(`/distributors/${id}`)
+  return data.data.distributor
 }
 
 export async function createDistributor(form) {

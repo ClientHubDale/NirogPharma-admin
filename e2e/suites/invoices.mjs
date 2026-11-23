@@ -276,43 +276,78 @@ ok('…the pictures with it', 'logoUrl' in (stamped.letterhead?.company ?? {}), 
 ok('…and the bank the money goes to', 'accountNumber' in (stamped.letterhead?.bank ?? {}), JSON.stringify(stamped.letterhead?.bank))
 ok('but the list does not carry it, being a kilobyte a row', !('letterhead' in issued), Object.keys(issued).join(' '))
 
-const realLetterhead = (await api('/settings')).data.settings
-await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: 'https://example.test/e2e-new-logo.png' }) })
-await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: 'E2E REPLACEMENT BANK' }) })
+/**
+ * What a bill keeps is checked by swapping the live letterhead, so the real one
+ * has to come back whatever happens next. Two things used to go wrong.
+ *
+ * A crash anywhere between the swap and the restore left the fake logo and bank
+ * name sitting in the client's live settings — their own bills then printed
+ * "E2E REPLACEMENT BANK" and asked for a logo on a domain that does not exist.
+ * The swap sits in a try/finally now, so the restore runs on the way out of a
+ * failure too.
+ *
+ * Worse, the restore trusted whatever was live as the real thing. Once polluted
+ * that made the damage permanent: every later run read the fake, called it real
+ * and faithfully put it back. So the genuine values are taken from the bill's
+ * own stamp when live settings are already carrying a marker, and the suite
+ * says plainly that it found one.
+ */
+const TEST_LOGO = 'https://example.test/e2e-new-logo.png'
+const TEST_BANK = 'E2E REPLACEMENT BANK'
+const looksFake = (value) => /E2E|example\.test/i.test(value ?? '')
 
-const reprint = (await api(`/invoices/${saved.id}`)).data.invoice
-eq('a new logo in settings leaves it alone', reprint.letterhead?.company?.logoUrl, stamped.letterhead?.company?.logoUrl)
-eq('and so does a new bank account', reprint.letterhead?.bank?.bankName, stamped.letterhead?.bank?.bankName)
-
-// The sheet on screen is what comes out of the printer, so the old logo has to
-// be the one the page asks for.
-await goto(page, `/admin/sales/invoices/${saved.id}/print`)
-await sleep(1500)
-const printed = await page.$$eval('img', (els) => els.map((el) => el.getAttribute('src')))
+const live = (await api('/settings')).data.settings
 ok(
-  'the printed sheet asks for the old logo, not the new one',
-  !printed.some((src) => (src ?? '').includes('e2e-new-logo')),
-  printed.join(' '),
+  'the live letterhead is the real one, not a leftover',
+  !looksFake(live.company.logoUrl) && !looksFake(live.bank.bankName),
+  `${live.company.logoUrl} | ${live.bank.bankName}`,
 )
 
-// A bill made now takes today's letterhead, draft and all — "draft new logo
-// which is selected on save draft time".
-const fresh = (await api('/invoices', {
-  method: 'POST',
-  body: JSON.stringify({
-    invoiceNo: 'E2E/26-27/009',
-    distributorId: firm.id,
-    invoiceDate: '2026-11-03',
-    lines: [{ itemId: item.id, quantity: 1, batches: [] }],
-  }),
-})).data?.invoice
-eq('a draft saved now takes the logo that is there now', fresh?.letterhead?.company?.logoUrl, 'https://example.test/e2e-new-logo.png')
-eq('…and the bank that is there now', fresh?.letterhead?.bank?.bankName, 'E2E REPLACEMENT BANK')
-if (fresh) await api(`/invoices/${fresh.id}`, { method: 'DELETE' })
+// A marker in live settings means an earlier run died holding the swap; the
+// bill issued above still carries what the letterhead really was.
+const realLetterhead = {
+  company: { logoUrl: looksFake(live.company.logoUrl) ? (stamped.letterhead?.company?.logoUrl ?? '') : live.company.logoUrl },
+  bank: { bankName: looksFake(live.bank.bankName) ? (stamped.letterhead?.bank?.bankName ?? '') : live.bank.bankName },
+}
 
-// Put the real letterhead back before anything else runs.
-await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: realLetterhead.company.logoUrl }) })
-await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: realLetterhead.bank.bankName }) })
+try {
+  await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: TEST_LOGO }) })
+  await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: TEST_BANK }) })
+
+  const reprint = (await api(`/invoices/${saved.id}`)).data.invoice
+  eq('a new logo in settings leaves it alone', reprint.letterhead?.company?.logoUrl, stamped.letterhead?.company?.logoUrl)
+  eq('and so does a new bank account', reprint.letterhead?.bank?.bankName, stamped.letterhead?.bank?.bankName)
+
+  // The sheet on screen is what comes out of the printer, so the old logo has to
+  // be the one the page asks for.
+  await goto(page, `/admin/sales/invoices/${saved.id}/print`)
+  await sleep(1500)
+  const printed = await page.$$eval('img', (els) => els.map((el) => el.getAttribute('src')))
+  ok(
+    'the printed sheet asks for the old logo, not the new one',
+    !printed.some((src) => (src ?? '').includes('e2e-new-logo')),
+    printed.join(' '),
+  )
+
+  // A bill made now takes today's letterhead, draft and all — "draft new logo
+  // which is selected on save draft time".
+  const fresh = (await api('/invoices', {
+    method: 'POST',
+    body: JSON.stringify({
+      invoiceNo: 'E2E/26-27/009',
+      distributorId: firm.id,
+      invoiceDate: '2026-11-03',
+      lines: [{ itemId: item.id, quantity: 1, batches: [] }],
+    }),
+  })).data?.invoice
+  eq('a draft saved now takes the logo that is there now', fresh?.letterhead?.company?.logoUrl, TEST_LOGO)
+  eq('…and the bank that is there now', fresh?.letterhead?.bank?.bankName, TEST_BANK)
+  if (fresh) await api(`/invoices/${fresh.id}`, { method: 'DELETE' })
+} finally {
+  // Before anything else runs, and before this suite is allowed to fail.
+  await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: realLetterhead.company.logoUrl }) })
+  await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: realLetterhead.bank.bankName }) })
+}
 const restored = (await api('/settings')).data.settings
 eq('and the real letterhead goes back as it was', restored.company.logoUrl, realLetterhead.company.logoUrl)
 eq('…bank included', restored.bank.bankName, realLetterhead.bank.bankName)

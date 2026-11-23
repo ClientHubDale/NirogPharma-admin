@@ -64,6 +64,9 @@ export const emptyDistributorForm = () => ({
   executiveId: '',
   shopPhoto: [],
   signature: [],
+  /// Identity proof, photographed on the spot. Both sides.
+  aadhaarFront: [],
+  aadhaarBack: [],
 })
 
 const s = (value) => (value === null || value === undefined || value === 0 ? '' : String(value))
@@ -80,6 +83,8 @@ export const distributorToForm = (distributor) => ({
   executiveId: distributor.executiveIds?.[0] ?? '',
   shopPhoto: distributor.shopPhoto ?? [],
   signature: distributor.signature ?? [],
+  aadhaarFront: distributor.aadhaarFront ?? [],
+  aadhaarBack: distributor.aadhaarBack ?? [],
 })
 
 const MOBILE_PATTERN = /^[6-9]\d{9}$/
