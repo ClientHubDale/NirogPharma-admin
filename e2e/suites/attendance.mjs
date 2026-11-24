@@ -125,6 +125,11 @@ eq('an executive may not read the whole roster', (await asExec('/attendance')).s
 
 /* ── 3. opening the day ───────────────────────────────────────────────── */
 
+// Set the switch this section is about rather than inheriting whatever the
+// admin last saved. The suite used to assume odometer tracking was off, and
+// started failing the day somebody turned it on.
+await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify({ trackOdometer: false, requireOdometer: false }) })
+
 const checkIn = await asExec('/attendance/check-in', {
   method: 'POST',
   body: JSON.stringify({ inLat: 28.9845, inLng: 77.7064, inAccuracy: 4, inAddress: 'Scheme 54, Vijay Nagar', odoIn: 28416 }),
@@ -259,6 +264,28 @@ ok('…and says which kinds there are', /IN, OUT, DAY/.test(JSON.stringify(badKi
 // Only then does it ask for the file itself.
 const noFile = await asExec(`/attendance/${row.id}/photos`, { method: 'POST', body: JSON.stringify({ kind: 'DAY' }) })
 eq('a photo request with nothing attached is refused', noFile.status, 400)
+
+/* ── 9. absence is a day somebody owed ───────────────────────────────── */
+
+// It used to count plain calendar days, which made a month read as two
+// hundred absences for staff who had barely missed one. Three things are not
+// absences: a weekly off, a declared holiday, and a day yet to happen.
+const month = await api('/attendance?from=2026-11-01&to=2026-11-30')
+ok('the report says how many days were actually owed', typeof month.data?.workingDays === 'number', JSON.stringify(month.data?.workingDays))
+ok('…never more than the calendar days in the window', month.data.workingDays <= month.data.days, `${month.data.workingDays} of ${month.data.days}`)
+
+const future = await api('/attendance?from=2099-01-01&to=2099-01-31')
+eq('a window entirely in the future owes nobody anything', future.data?.workingDays, 0)
+eq('…so nobody is absent in it', future.data?.summary?.absent, 0)
+
+const oneDay = await api(`/attendance?from=${row.date}&to=${row.date}&userId=${userId}`)
+eq('one person on one day they worked owes one day', oneDay.data?.workingDays, 1)
+eq('…and is present for it', oneDay.data?.summary?.present, 1)
+eq('…so not absent', oneDay.data?.summary?.absent, 0)
+
+// The window the office window is measured against comes back too, so the
+// panel can stop carrying its own DEFAULT_OFFICE_TIME.
+ok('the office settings come back with the report', Array.isArray(month.data?.officeTime?.holidays), JSON.stringify(month.data?.officeTime))
 
 /* ── the screen ───────────────────────────────────────────────────────── */
 
