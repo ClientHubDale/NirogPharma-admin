@@ -296,19 +296,46 @@ const TEST_LOGO = 'https://example.test/e2e-new-logo.png'
 const TEST_BANK = 'E2E REPLACEMENT BANK'
 const looksFake = (value) => /E2E|example\.test/i.test(value ?? '')
 
-const live = (await api('/settings')).data.settings
-ok(
-  'the live letterhead is the real one, not a leftover',
-  !looksFake(live.company.logoUrl) && !looksFake(live.bank.bankName),
-  `${live.company.logoUrl} | ${live.bank.bankName}`,
-)
-
-// A marker in live settings means an earlier run died holding the swap; the
-// bill issued above still carries what the letterhead really was.
-const realLetterhead = {
-  company: { logoUrl: looksFake(live.company.logoUrl) ? (stamped.letterhead?.company?.logoUrl ?? '') : live.company.logoUrl },
-  bank: { bankName: looksFake(live.bank.bankName) ? (stamped.letterhead?.bank?.bankName ?? '') : live.bank.bankName },
+/**
+ * The letterhead as the client's own bills remember it.
+ *
+ * Not from a bill this suite wrote: if live settings were already polluted
+ * when the run started, that bill was stamped with the pollution and would
+ * confirm it. Only a bill that predates the suite can be trusted, so the
+ * E2E-numbered ones are skipped and the rest have to agree.
+ */
+const letterheadFromClientBills = async () => {
+  const bills = ((await api('/invoices?limit=100')).data?.invoices ?? []).filter((row) => !/E2E/i.test(row.invoiceNo ?? ''))
+  for (const bill of bills) {
+    const head = (await api(`/invoices/${bill.id}`)).data?.invoice?.letterhead
+    if (head?.bank && !looksFake(head.bank.bankName) && !looksFake(head.company?.logoUrl)) return head
+  }
+  return null
 }
+
+const live = (await api('/settings')).data.settings
+const polluted = looksFake(live.company.logoUrl) || looksFake(live.bank.bankName) || looksFake(live.bank.ifsc)
+ok('the live letterhead is the real one, not a leftover', !polluted, `${live.company.logoUrl} | ${live.bank.bankName}`)
+
+/**
+ * A marker in live settings means an earlier run died holding the swap — a
+ * killed process cannot run its own cleanup, so the only reliable place to
+ * repair it is the beginning of the next run. Put it right here rather than
+ * merely remembering it for the finally, so the rest of this run measures
+ * against the truth and the client's next bill prints their own bank.
+ */
+const fromBills = polluted ? await letterheadFromClientBills() : null
+if (polluted && fromBills) {
+  await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: fromBills.company?.logoUrl ?? '' }) })
+  await api('/settings/bank', { method: 'PATCH', body: JSON.stringify(fromBills.bank) })
+  ok('…and a leftover found in live settings is put back from the client’s own bills', true)
+} else if (polluted) {
+  ok('…and a leftover found in live settings is put back from the client’s own bills', false, 'no clean bill to recover from')
+}
+
+/** Whatever is live now — genuine, because anything fake was just repaired. */
+const realSettings = (await api('/settings')).data.settings
+const realLetterhead = { company: { logoUrl: realSettings.company.logoUrl }, bank: { bankName: realSettings.bank.bankName } }
 
 try {
   await api('/settings/company', { method: 'PATCH', body: JSON.stringify({ logoUrl: TEST_LOGO }) })
@@ -482,27 +509,40 @@ eq('the bill is ruled to twenty goods rows', ruled, 20)
 // baked into the code. It reaches the bills written after it is saved: an
 // existing bill keeps the account it already went out asking for, which is
 // checked where the letterhead is.
-const bankBefore = (await api('/settings')).data.settings.bank
-await api('/settings/bank', { method: 'PATCH', body: JSON.stringify({ bankName: 'E2E TEST BANK', ifsc: 'E2EB0001234', accountNumber: '9988776655', branch: 'E2E BRANCH' }) })
+// `realSettings` was read after the repair above, so this is the client's own
+// bank and not a leftover being faithfully put back. The swap sits in a
+// try/finally: a thrown assertion between here and the restore used to leave
+// the test account live, where the client's next bill would have printed it.
+const bankBefore = realSettings.bank
+let onNewBank = null
+let onRealBank = null
 
-const onNewBank = (await api('/invoices', {
-  method: 'POST',
-  body: JSON.stringify({
-    invoiceNo: 'E2E/26-27/BANK',
-    distributorId: firm.id,
-    invoiceDate: '2026-11-03',
-    lines: [{ itemId: item.id, quantity: 1, batches: [] }],
-  }),
-})).data?.invoice
-await goto(page, `/admin/sales/invoices/${onNewBank.id}/print`)
-await sleep(1800)
-const withBank = await pageText(page)
-has('a bill written now shows the bank the admin saved', withBank, 'E2E TEST BANK')
-has('…with its IFSC', withBank, 'E2EB0001234')
-has('…and the account number', withBank, '9988776655')
+try {
+  await api('/settings/bank', {
+    method: 'PATCH',
+    body: JSON.stringify({ bankName: 'E2E TEST BANK', ifsc: 'E2EB0001234', accountNumber: '9988776655', branch: 'E2E BRANCH' }),
+  })
 
-await api('/settings/bank', { method: 'PATCH', body: JSON.stringify(bankBefore) })
-const onRealBank = (await api('/invoices', {
+  onNewBank = (await api('/invoices', {
+    method: 'POST',
+    body: JSON.stringify({
+      invoiceNo: 'E2E/26-27/BANK',
+      distributorId: firm.id,
+      invoiceDate: '2026-11-03',
+      lines: [{ itemId: item.id, quantity: 1, batches: [] }],
+    }),
+  })).data?.invoice
+  await goto(page, `/admin/sales/invoices/${onNewBank.id}/print`)
+  await sleep(1800)
+  const withBank = await pageText(page)
+  has('a bill written now shows the bank the admin saved', withBank, 'E2E TEST BANK')
+  has('…with its IFSC', withBank, 'E2EB0001234')
+  has('…and the account number', withBank, '9988776655')
+} finally {
+  await api('/settings/bank', { method: 'PATCH', body: JSON.stringify(bankBefore) })
+}
+
+onRealBank = (await api('/invoices', {
   method: 'POST',
   body: JSON.stringify({
     invoiceNo: 'E2E/26-27/BANK2',
@@ -515,6 +555,14 @@ await goto(page, `/admin/sales/invoices/${onRealBank.id}/print`)
 await sleep(1800)
 ok('and the next one follows Settings back again', !(await pageText(page)).includes('E2E TEST BANK'))
 for (const row of [onNewBank, onRealBank]) if (row) await api(`/invoices/${row.id}`, { method: 'DELETE' })
+
+// Say so out loud rather than trusting the restore ran.
+const bankAfter = (await api('/settings')).data.settings.bank
+ok(
+  'the suite leaves the client’s own bank details behind it',
+  !Object.values(bankAfter).some((value) => looksFake(value)),
+  JSON.stringify(bankAfter),
+)
 
 await cleanup()
 const left = await api('/invoices?limit=100')
