@@ -1,18 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { useSelector } from 'react-redux'
 import { LiveMap } from '@/components/liveLocation/LiveMap'
 import { StatusFilterBar } from '@/components/liveLocation/StatusFilterBar'
 import { UserListPanel } from '@/components/liveLocation/UserListPanel'
 import { UserTrackPanel } from '@/components/liveLocation/UserTrackPanel'
 import { Button } from '@/components/ui/button'
 import { LIVE_FILTERS, liveStatusOf, matchesFilter } from '@/lib/liveStatus'
-import { fieldStaff } from '@/mocks/liveLocation'
-import { getUserTrack, todayISO } from '@/mocks/userTracks'
-import { DOC_TYPES, titleCase } from '@/components/Transactions/docTypes'
-import { docTotals, lineTotals } from '@/components/Transactions/transactionModel'
-import { selectParties } from '@/store/partiesSlice'
-import { selectDocs } from '@/store/transactionsSlice'
+import { todayISO } from '@/lib/day'
+import * as trackingService from '@/services/trackingService'
+import { listOrders } from '@/services/ordersService'
+import { STATUS_LABEL, STATUS_TONE } from '@/components/Sales/SalesOrders/orderModel'
 
 
 const STATUS_ORDER = { live: 0, active: 1, offline: 2 }
@@ -32,52 +29,120 @@ export default function LiveLocation() {
   const [activeEntryId, setActiveEntryId] = useState(null)
   const [updatedAt, setUpdatedAt] = useState(() => new Date())
 
+  const [staff, setStaff] = useState([])
+  const [track, setTrack] = useState(null)
+  const [orders, setOrders] = useState([])
+
+  /**
+   * The roster, re-read whenever Refresh is pressed. `updatedAt` is both the
+   * timestamp the header prints and what asks for a fresh read, so the button
+   * that already existed now actually fetches.
+   */
+  useEffect(() => {
+    let alive = true
+    trackingService
+      .live()
+      .then((rows) => alive && setStaff(rows))
+      .catch(() => alive && setStaff([]))
+    return () => {
+      alive = false
+    }
+  }, [updatedAt])
+
+  /** One person's day, re-read when the person or the date changes. */
+  useEffect(() => {
+    if (!trackUserId) {
+      setTrack(null)
+      return undefined
+    }
+    let alive = true
+    setTrack(null)
+    trackingService
+      .track(trackUserId, trackDate)
+      .then((found) => alive && setTrack(found))
+      .catch(() => alive && setTrack(trackingService.emptyTrack(trackUserId, trackDate)))
+    return () => {
+      alive = false
+    }
+  }, [trackUserId, trackDate, updatedAt])
+
+  /**
+   * What they sold that day — the Secondary sales tab.
+   *
+   * Orders only. An order records who booked it; a bill does not, because
+   * only the office writes one, so there is no field author to attribute a
+   * bill to.
+   */
+  useEffect(() => {
+    if (!trackUserId) {
+      setOrders([])
+      return undefined
+    }
+    let alive = true
+    listOrders({ limit: 200 })
+      .then(({ orders: rows }) => alive && setOrders(rows ?? []))
+      .catch(() => alive && setOrders([]))
+    return () => {
+      alive = false
+    }
+  }, [trackUserId, trackDate])
+
   const counts = useMemo(
-    () => Object.fromEntries(LIVE_FILTERS.map((f) => [f, fieldStaff.filter((u) => matchesFilter(u, f)).length])),
-    [],
+    () => Object.fromEntries(LIVE_FILTERS.map((f) => [f, staff.filter((u) => matchesFilter(u, f)).length])),
+    [staff],
   )
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return fieldStaff
+    return staff
       .filter((u) => matchesFilter(u, filter))
       .filter((u) => !q || u.name.toLowerCase().includes(q) || u.area?.toLowerCase().includes(q))
       .sort(
         (a, b) =>
           STATUS_ORDER[liveStatusOf(a)] - STATUS_ORDER[liveStatusOf(b)] || a.name.localeCompare(b.name),
       )
-  }, [filter, query])
+  }, [staff, filter, query])
 
-  const trackUser = fieldStaff.find((u) => u.id === trackUserId) ?? null
-  const trackData = trackUser ? getUserTrack(trackUser, trackDate) : null
+  const trackUser = staff.find((u) => u.id === trackUserId) ?? null
+  // The panel formats these totals without checking them, so it is given an
+  // empty day rather than null while the real one is still on its way.
+  const trackData = trackUser ? (track ?? trackingService.emptyTrack(trackUserId, trackDate)) : null
 
-  // Secondary sales = what this user sold to retailers that day.
-  const orders = useSelector(selectDocs('SALES_ORDER'))
-  const invoices = useSelector(selectDocs('SALES_INVOICE'))
-  const customers = useSelector(selectParties('CUSTOMER'))
+  /**
+   * Secondary sales — what this person booked that day.
+   *
+   * The shop or doctor it was booked at is the party where there is one; an
+   * order the office typed has no shop behind it, so it falls back to the
+   * firm being billed.
+   */
   const userSales = useMemo(() => {
     if (!trackUser) return []
-    const partyName = Object.fromEntries(customers.map((c) => [c.id, c.name]))
-    return [...orders, ...invoices]
-      .filter((doc) => doc.createdBy === trackUser.id && doc.date === trackDate)
-      .map((doc) => {
-        const config = DOC_TYPES[doc.type]
-        const status = config.statuses.find((st) => st.value === doc.status)
-        return {
-          id: doc.id,
-          kind: titleCase(config.noun),
-          number: doc.number,
-          partyName: partyName[doc.partyId] ?? 'Deleted party',
-          status: status?.label ?? doc.status,
-          tone: status?.tone ?? 'neutral',
-          total: docTotals(doc, customers.find((c) => c.id === doc.partyId)).total,
-          qty: doc.lines.reduce((sum, line) => sum + (Number(line.qty) || 0), 0),
-          lines: doc.lines.map((line) => ({ ...line, amount: lineTotals(line).amount })),
-        }
-      })
+    return orders
+      .filter((order) => order.takenById === trackUser.id && order.orderDate === trackDate)
+      .map((order) => ({
+        id: order.id,
+        kind: 'Order',
+        number: order.orderNo,
+        partyName: order.shopName || order.distributorName || 'Unknown party',
+        status: STATUS_LABEL[order.status] ?? order.status,
+        tone: STATUS_TONE[order.status] ?? 'neutral',
+        total: Number(order.total) || 0,
+        qty: (order.lines ?? []).reduce((sum, line) => sum + (Number(line.quantity) || 0), 0),
+        lines: (order.lines ?? []).map((line) => ({
+          key: line.id,
+          name: line.itemName,
+          qty: Number(line.quantity) || 0,
+          unit: line.unit,
+          rate: Number(line.rate) || 0,
+          amount: Number(line.total) || 0,
+          free: Number(line.freeQty) || 0,
+          schemeName: line.freeLabel,
+        })),
+      }))
       .sort((a, b) => b.total - a.total)
-  }, [orders, invoices, customers, trackUser, trackDate])
-  const selectedUser = fieldStaff.find((u) => u.id === selectedId) ?? null
+  }, [orders, trackUser, trackDate])
+
+  const selectedUser = staff.find((u) => u.id === selectedId) ?? null
 
   const openTrack = (id) => {
     setTrackUserId(id)

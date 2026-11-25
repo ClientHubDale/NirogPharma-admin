@@ -2,13 +2,21 @@ import { BatteryMedium, Clock, MapPin, Route, ShoppingCart, Store, X } from 'luc
 import { cn } from '@/lib/utils'
 import { ROLE_LABELS } from '@/constants/roles'
 import { lastSeenRelative, LIVE_STATUS_STYLE, liveStatusOf } from '@/lib/liveStatus'
-import { getUserTrack } from '@/mocks/userTracks'
 
 /** Details for the selected user — shown in the Google InfoWindow and in the preview map. */
 export function UserInfoCard({ user, onClose, className }) {
   const status = liveStatusOf(user)
   const style = LIVE_STATUS_STYLE[status]
-  const today = getUserTrack(user)
+  /**
+   * Today's figures ride along on the user row from `GET /tracking/live`, so
+   * the popup needs no fetch of its own — and the map components in between
+   * need no extra prop threaded through them.
+   */
+  const today = {
+    distanceKm: Number(user.distanceKm) || 0,
+    visits: user.visits ?? 0,
+    orders: user.orders ?? 0,
+  }
   const stats = [
     { icon: Route, label: 'Today', value: `${today.distanceKm.toFixed(1)} km` },
     { icon: Store, label: 'Visits', value: today.visits },
