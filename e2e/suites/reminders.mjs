@@ -103,10 +103,36 @@ ok(
 eq('…and the firm count matches them', overdue.parties, new Set((overdue.bills ?? []).map((b) => b.distributorId)).size)
 
 // Asking for the list is what raises the nudges that are due, so the staff
-// side has to be populated by now — and only once per person per bill.
+// side has to be populated by now.
 const staff = (await api('/reminders/mine?all=1&limit=200')).data
-const pairs = (staff.reminders ?? []).map((row) => `${row.invoiceId}:${row.recipientId}`)
-eq('one nudge per person per bill, never two', pairs.length, new Set(pairs).size)
+
+/**
+ * One nudge per person per bill *per raise*.
+ *
+ * Not one ever: the client asked to be told again every alternate day until
+ * the money comes in, so a bill still unpaid two days later rightly produces
+ * a second row. This assertion used to compare total rows against distinct
+ * person-and-bill pairs, which held only until the cadence fired — and then
+ * failed every other day for being right.
+ *
+ * What must never happen is the same person being told twice in the same
+ * breath, which is the bug this was written for: a manager who is also an
+ * executive on their own firms appeared in both lists and got two.
+ */
+const moments = (staff.reminders ?? []).map((row) => `${row.invoiceId}:${row.recipientId}:${row.raisedAt}`)
+eq('nobody is told twice in the same raise', moments.length, new Set(moments).size)
+
+// And a repeat, when it comes, is a cadence apart rather than a double-send.
+const byPair = new Map()
+for (const row of staff.reminders ?? []) {
+  const key = `${row.invoiceId}:${row.recipientId}`
+  byPair.set(key, [...(byPair.get(key) ?? []), new Date(row.raisedAt).getTime()])
+}
+const tooSoon = [...byPair.entries()].filter(([, times]) => {
+  const sorted = [...times].sort((a, b) => a - b)
+  return sorted.some((time, i) => i > 0 && time - sorted[i - 1] < (overdue.everyDays ?? 2) * 86400000 - 60000)
+})
+ok('…and a repeat nudge waits the full cadence', tooSoon.length === 0, tooSoon.map(([key]) => key).join(', '))
 ok(
   'a nudge names the bill, the firm and who it is for',
   (staff.reminders ?? []).every((row) => row.invoiceNo && row.distributorName && row.recipientName),
