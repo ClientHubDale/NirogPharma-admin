@@ -87,6 +87,70 @@ await sleep(2500)
 eq('a revoked session lands back on login', new URL(page.url()).pathname, '/login')
 eq('and the stored session is cleared', await session(), null)
 
+/* ── a disabled account stops working at once ─────────────────────────── */
+
+/**
+ * The signed-in user is held in memory for a short while, so that every
+ * request does not pay a round trip to a database in Tokyo just to find out
+ * who is asking. The danger in that is obvious: an account disabled by the
+ * office must not keep working until the cache happens to expire. Disabling
+ * drops the entry, and this is the check that says so.
+ */
+const MARK = 'E2E-AUTH'
+const MOBILE = '9900990096'
+const PASSWORD = 'Revoke1234@'
+
+const admin = await fetch(`${API}/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ mobile: ADMIN.mobile, password: ADMIN.password, client: 'web' }),
+}).then((r) => r.json())
+
+const call = (bearer) => (path, init) =>
+  fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' } }).then((r) =>
+    r.json().then((body) => ({ status: r.status, ...body })),
+  )
+const asAdmin = call(admin.data.accessToken)
+
+// Sweep by marker: a run that died here would otherwise block the next one on
+// the mobile number being taken.
+for (const stale of ((await asAdmin('/users?limit=300')).data?.users ?? []).filter((u) => u.name?.startsWith(MARK))) {
+  await asAdmin(`/users/${stale.id}`, { method: 'DELETE' })
+}
+
+const made = await asAdmin('/users', {
+  method: 'POST',
+  body: JSON.stringify({ name: `${MARK} Executive`, mobile: MOBILE, role: 'EXECUTIVE', password: PASSWORD }),
+})
+eq('a throwaway executive can be created', made.status, 201)
+const victimId = made.data.user.id
+
+const victim = await fetch(`${API}/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ mobile: MOBILE, password: PASSWORD, client: 'app' }),
+}).then((r) => r.json())
+const asVictim = call(victim.data?.accessToken ?? '')
+
+eq('they can ask the API who they are', (await asVictim('/attendance/today')).status, 200)
+// Twice, so the second answer is certainly the cached one.
+eq('…and again, served from memory', (await asVictim('/attendance/today')).status, 200)
+
+await asAdmin(`/users/${victimId}/status`, { method: 'PATCH', body: JSON.stringify({ isActive: false }) })
+eq('the moment the office disables them, the same token is refused', (await asVictim('/attendance/today')).status, 403)
+
+await asAdmin(`/users/${victimId}/status`, { method: 'PATCH', body: JSON.stringify({ isActive: true }) })
+eq('…and allowed again the moment they are re-enabled', (await asVictim('/attendance/today')).status, 200)
+
+await asAdmin(`/users/${victimId}`, { method: 'DELETE' })
+eq('a deleted account is refused at once too', (await asVictim('/attendance/today')).status, 401)
+
+eq(
+  'the suite leaves no user behind',
+  ((await asAdmin('/users?limit=300')).data?.users ?? []).filter((u) => u.name?.startsWith(MARK)).length,
+  0,
+)
+
 // The two deliberate bad sign-ins, and the revoked-session test, make Chrome
 // log those 401 responses.
 await finish(browser, errors, { ignore: /status of 401/ })
