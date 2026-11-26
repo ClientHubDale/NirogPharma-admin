@@ -1,15 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { CalendarClock, Pencil } from 'lucide-react'
-import { useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router-dom'
 import { DataTable, listFeatures } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
 import { Pagination } from '@/components/data/Pagination'
 import { SearchInput } from '@/components/data/SearchInput'
-import { fieldStaff } from '@/mocks/liveLocation'
-import { selectAttendance } from '@/store/attendanceSlice'
-import { selectOfficeTime } from '@/store/settingsSlice'
+import * as attendanceService from '@/services/attendanceService'
 import { attendanceStats, isPartial, workedMinutes } from './attendanceModel'
 import { Dash, ImagesCell, TimeCell, WorkedCell } from './components/AttendanceCells'
 import { StatTabs } from './components/StatTabs'
@@ -21,22 +18,44 @@ const todayISO = () => {
 }
 
 /** Attendance for one day: who is in, who is not, and the day's numbers. */
+/** Until the day's answer arrives — an empty day, not a missing one. */
+const EMPTY_DAY = { rows: [], staff: [], officeTime: { start: '08:00', end: '23:00' } }
+
 export default function Attendance() {
   const navigate = useNavigate()
-  const records = useSelector(selectAttendance)
-  const officeTime = useSelector(selectOfficeTime)
   const [date, setDate] = useState(todayISO)
   const [tab, setTab] = useState('present')
   const [search, setSearch] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
+  const [day, setDay] = useState(EMPTY_DAY)
 
-  const dayRecords = useMemo(() => records.filter((r) => r.date === date), [records, date])
-  const stats = attendanceStats(dayRecords, officeTime, fieldStaff.length)
+  /**
+   * The day the admin is looking at.
+   *
+   * The answer carries the roster as well as the days worked, because
+   * "absent" only means anything against a list of who was expected — and
+   * that list is the server's, not a copy kept here that would drift the
+   * first time somebody joined or left.
+   */
+  useEffect(() => {
+    let alive = true
+    attendanceService
+      .day(date)
+      .then((found) => alive && setDay(found))
+      .catch(() => alive && setDay(EMPTY_DAY))
+    return () => {
+      alive = false
+    }
+  }, [date])
+
+  const officeTime = day.officeTime
+  const dayRecords = day.rows
+  const stats = attendanceStats(dayRecords, officeTime, day.staff.length)
 
   /** One row per user, whether or not they checked in. */
   const rows = useMemo(() => {
     const byUser = Object.fromEntries(dayRecords.map((r) => [r.userId, r]))
-    return fieldStaff.map((user) => {
+    return day.staff.map((user) => {
       const record = byUser[user.id]
       const worked = workedMinutes(record)
       return {
@@ -48,7 +67,7 @@ export default function Attendance() {
         odoDistance: record?.odoIn != null && record?.odoOut != null ? record.odoOut - record.odoIn : null,
       }
     })
-  }, [dayRecords, officeTime])
+  }, [dayRecords, day.staff, officeTime])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

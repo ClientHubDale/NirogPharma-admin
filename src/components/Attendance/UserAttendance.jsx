@@ -1,14 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { CalendarClock } from 'lucide-react'
-import { useSelector } from 'react-redux'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { DataTable, listFeatures } from '@/components/data/DataTable'
 import { EmptyState } from '@/components/data/EmptyState'
 import { Pagination } from '@/components/data/Pagination'
-import { fieldStaff } from '@/mocks/liveLocation'
-import { selectAttendance } from '@/store/attendanceSlice'
-import { selectOfficeTime } from '@/store/settingsSlice'
+import * as attendanceService from '@/services/attendanceService'
 import { isLate, isPartial, workedMinutes } from './attendanceModel'
 import { Dash, ImagesCell, TimeCell, WorkedCell } from './components/AttendanceCells'
 import { StatTabs } from './components/StatTabs'
@@ -18,21 +15,41 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const thisMonth = () => new Date().toISOString().slice(0, 7)
 
 /** One user's month: the days they worked, their hours and where they were. */
+/** Until the month's answer arrives — nothing yet, rather than nobody. */
+const EMPTY_MONTH = { rows: [], staff: [], officeTime: { start: '08:00', end: '23:00' } }
+
 export default function UserAttendance() {
   const { userId } = useParams()
-  const records = useSelector(selectAttendance)
-  const officeTime = useSelector(selectOfficeTime)
   const [month, setMonth] = useState(thisMonth)
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 31 })
+  const [data, setData] = useState(EMPTY_MONTH)
+  const [loaded, setLoaded] = useState(false)
 
-  const user = fieldStaff.find((u) => u.id === userId)
+  useEffect(() => {
+    let alive = true
+    setLoaded(false)
+    attendanceService
+      .month(userId, month)
+      .then((found) => alive && setData(found))
+      .catch(() => alive && setData(EMPTY_MONTH))
+      .finally(() => alive && setLoaded(true))
+    return () => {
+      alive = false
+    }
+  }, [userId, month])
+
+  const officeTime = data.officeTime
+  // The report is already narrowed to this person, so `staff` is them — and
+  // asking the server who they are beats keeping a roster here that would go
+  // stale the moment somebody joined.
+  const user = data.staff.find((u) => u.id === userId) ?? null
+
   const rows = useMemo(
     () =>
-      records
-        .filter((r) => r.userId === userId && r.date.startsWith(month))
+      [...data.rows]
         .sort((a, b) => b.date.localeCompare(a.date))
         .map((record) => ({ ...record, worked: workedMinutes(record), partial: isPartial(record, officeTime) })),
-    [records, userId, month, officeTime],
+    [data.rows, officeTime],
   )
 
   const columns = useMemo(
@@ -75,7 +92,9 @@ export default function UserAttendance() {
     [user],
   )
 
-  if (!user) return <Navigate to="/admin/attendance" replace />
+  // Only once the answer is back. Redirecting on the first render — before
+  // the fetch returns — would bounce the admin off the page they just opened.
+  if (loaded && !user) return <Navigate to="/admin/attendance" replace />
 
   const stats = {
     present: rows.length,
@@ -89,7 +108,7 @@ export default function UserAttendance() {
         <nav className="flex items-center gap-2 text-lg font-extrabold sm:text-2xl" aria-label="Breadcrumb">
           <Link to="/admin/attendance" className="text-green-deep hover:underline">Users</Link>
           <span className="text-ink-muted">›</span>
-          <span className="uppercase">{user.name}</span>
+          <span className="uppercase">{user?.name ?? ""}</span>
         </nav>
         <input
           type="month"
