@@ -10,6 +10,18 @@ PORT=${E2E_PORT:-5199}
 BASE="http://localhost:$PORT"
 export E2E_BASE="$BASE"
 
+# The suites talk to the API directly as well as through the browser, so the
+# two have to agree about where it is. Rather than each suite carrying its own
+# guess, take the address the panel itself is built with: .env is the one place
+# that knows, and a port moved there moves here too. (The backend sat on 5000
+# until another project took that port; hunting the difference through sixteen
+# suites is what this avoids.)
+if [ -z "${E2E_API:-}" ] && [ -f .env ]; then
+  E2E_API=$(sed -n 's/^VITE_API_BASE_URL=//p' .env | tr -d '"'"'"' \r' | head -1)
+  [ -n "$E2E_API" ] && export E2E_API
+fi
+echo "api: ${E2E_API:-http://localhost:5000/api/v1 (suite default)}"
+
 started=""
 if ! curl -s -o /dev/null "$BASE/"; then
   npx vite --port "$PORT" --strictPort >/tmp/np-e2e-vite.log 2>&1 &
