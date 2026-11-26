@@ -57,11 +57,25 @@ export default function Settings() {
   // The server owns the bank and billing groups. When a load or a save brings
   // new values in, the draft on screen is reset to them — adjusted during the
   // render that notices, rather than in an effect that would render twice.
-  const [serverCopy, setServerCopy] = useState({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany })
-  if (serverCopy.bank !== savedBank || serverCopy.invoice !== savedInvoice || serverCopy.company !== savedBillCompany) {
-    setServerCopy({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany })
+  const [serverCopy, setServerCopy] = useState({
+    bank: savedBank,
+    invoice: savedInvoice,
+    company: savedBillCompany,
+    mobileApp: savedMobileApp,
+  })
+  if (
+    serverCopy.bank !== savedBank ||
+    serverCopy.invoice !== savedInvoice ||
+    serverCopy.company !== savedBillCompany ||
+    serverCopy.mobileApp !== savedMobileApp
+  ) {
+    setServerCopy({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany, mobileApp: savedMobileApp })
     if (serverCopy.bank !== savedBank) setForm((f) => ({ ...f, bank: savedBank }))
     if (serverCopy.invoice !== savedInvoice) setInvoice(savedInvoice)
+    // Otherwise the switches would show this screen's defaults until somebody
+    // reloaded, and an admin could read "photo optional" off a tab while the
+    // API was already refusing check-ins without one.
+    if (serverCopy.mobileApp !== savedMobileApp) setMobileApp(savedMobileApp)
     setTemplate({ company: savedBillCompany, bank: savedBank })
   }
 
@@ -113,8 +127,22 @@ export default function Settings() {
       }
       dispatch(companySaved({ ...form, office: { ...form.office, holidays: cleanHolidays(form.office.holidays) } }))
     } else {
-      await new Promise((r) => setTimeout(r, 350)) // mock network
+      // These are not a preference the panel keeps to itself — the API reads
+      // them on every check-in. "Require a photo" switched on here is what
+      // makes the app refuse a check-in without a selfie, so it has to reach
+      // the server rather than live in this tab until the next reload.
+      const result = await dispatch(saveSettingsGroup({ group: 'mobileApp', patch: mobileApp }))
+      setSaving(false)
+      if (saveSettingsGroup.rejected.match(result)) {
+        return setNotice({ tone: 'danger', message: result.payload?.message ?? 'Could not save the mobile app settings.' })
+      }
       dispatch(mobileAppSaved(mobileApp))
+      return setNotice({
+        tone: 'success',
+        message: mobileApp.photoAtCheckIn
+          ? 'Mobile app settings saved — a check-in now needs a photo.'
+          : 'Mobile app settings saved — a photo at check-in is optional.',
+      })
     }
 
     setSaving(false)

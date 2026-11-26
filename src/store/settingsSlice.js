@@ -111,6 +111,10 @@ const settingsSlice = createSlice({
         if (payload.stock) state.stock = { ...state.stock, ...payload.stock }
         // The letterhead the bill prints, saved on the server.
         if (payload.company) state.billCompany = { ...(state.billCompany ?? {}), ...payload.company }
+        // What the field app asks for — the check-in selfie and the odometer
+        // among them. These decide what the API accepts, so the screen has to
+        // show what the server actually holds rather than its own defaults.
+        if (payload.mobileApp) state.mobileApp = { ...state.mobileApp, ...payload.mobileApp }
       })
       .addCase(fetchSettings.rejected, (state, { payload }) => {
         state.status = 'failed'
