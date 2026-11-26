@@ -79,7 +79,7 @@ const asExec = call((await login({ mobile: MOBILE, password: PASSWORD, client: '
 
 /* ── the profile screen's five lines ──────────────────────────────────── */
 
-const p = (await asExec('/auth/me')).data?.profile
+const p = (await asExec('/auth/profile')).data?.profile
 ok('the profile comes back', Boolean(p))
 eq('Name', p.name, `${MARK} Executive`)
 eq('Mobile (login ID)', p.mobile, MOBILE)
@@ -107,7 +107,7 @@ eq('…and another off', saved.data?.preferences?.notifications?.due, false)
 eq('…the untouched ones stay as they were', saved.data?.preferences?.notifications?.orders, true)
 eq('…and the theme sticks', saved.data?.preferences?.theme, 'dark')
 
-const again = (await asExec('/auth/me')).data.profile
+const again = (await asExec('/auth/profile')).data.profile
 eq('and it survives a re-read, so a reinstall cannot undo it', again.preferences.notifications.eod, true)
 eq('…theme too', again.preferences.theme, 'dark')
 
@@ -118,21 +118,21 @@ eq('a switch the app does not have is ignored, not stored', stray.data?.preferen
 /* ── pay is the admin's to allow ──────────────────────────────────────── */
 
 await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify({ showSalary: false }) })
-const hidden = (await asExec('/auth/me')).data.profile
+const hidden = (await asExec('/auth/profile')).data.profile
 eq('with salary switched off, it is not shown', hidden.canSeePay, false)
 eq('…and not even sent', hidden.pay, undefined)
 
 await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify({ showSalary: true, salaryVisibleTo: ['ALL'] }) })
-const shown = (await asExec('/auth/me')).data.profile
+const shown = (await asExec('/auth/profile')).data.profile
 eq('switched on for all, it is shown', shown.canSeePay, true)
 eq('…with the figure the admin typed', shown.pay?.salary, 25000)
 eq('…and the monthly target', shown.pay?.target, 600000)
 
 await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify({ salaryVisibleTo: [boss.id] }) })
-eq('named for somebody else, it is hidden again', (await asExec('/auth/me')).data.profile.canSeePay, false)
+eq('named for somebody else, it is hidden again', (await asExec('/auth/profile')).data.profile.canSeePay, false)
 
 await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify({ salaryVisibleTo: [] }) })
-eq('an empty list means nobody, not everybody', (await asExec('/auth/me')).data.profile.canSeePay, false)
+eq('an empty list means nobody, not everybody', (await asExec('/auth/profile')).data.profile.canSeePay, false)
 
 await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify(theirApp) })
 
@@ -141,6 +141,14 @@ await api('/settings/mobileApp', { method: 'PATCH', body: JSON.stringify(theirAp
 const web = await api('/auth/me')
 ok('the panel still gets the `user` object it always had', Boolean(web.data?.user?.id && web.data.user.role))
 eq('…with exactly the keys it had before', Object.keys(web.data.user).sort().join(','), 'avatarUrl,email,id,mobile,name,role')
+
+/**
+ * …and nothing more. Every page the panel opens restores the session through
+ * /auth/me, so the profile — five extra round trips to a database in Tokyo —
+ * must not ride along on it. It briefly did, and took that route from 188ms
+ * to over a second.
+ */
+eq('the profile does not ride along on /auth/me', web.data.profile, undefined)
 
 await sweep()
 eq('nothing is left behind', ((await api('/users?limit=300')).data?.users ?? []).filter((u) => u.name?.startsWith(MARK)).length, 0)
