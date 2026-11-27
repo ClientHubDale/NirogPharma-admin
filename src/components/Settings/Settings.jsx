@@ -62,15 +62,19 @@ export default function Settings() {
     invoice: savedInvoice,
     company: savedBillCompany,
     mobileApp: savedMobileApp,
+    office: savedOffice,
   })
   if (
     serverCopy.bank !== savedBank ||
     serverCopy.invoice !== savedInvoice ||
     serverCopy.company !== savedBillCompany ||
-    serverCopy.mobileApp !== savedMobileApp
+    serverCopy.mobileApp !== savedMobileApp ||
+    serverCopy.office !== savedOffice
   ) {
-    setServerCopy({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany, mobileApp: savedMobileApp })
+    setServerCopy({ bank: savedBank, invoice: savedInvoice, company: savedBillCompany, mobileApp: savedMobileApp, office: savedOffice })
     if (serverCopy.bank !== savedBank) setForm((f) => ({ ...f, bank: savedBank }))
+    // The shift the server holds, not this tab's 08:00–23:00 placeholder.
+    if (serverCopy.office !== savedOffice) setForm((f) => ({ ...f, office: savedOffice }))
     if (serverCopy.invoice !== savedInvoice) setInvoice(savedInvoice)
     // Otherwise the switches would show this screen's defaults until somebody
     // reloaded, and an admin could read "photo optional" off a tab while the
@@ -119,13 +123,27 @@ export default function Settings() {
     }
 
     if (tab === 'company') {
-      // The bank is the server's; the rest of this tab is still local.
-      const result = await dispatch(saveSettingsGroup({ group: 'bank', patch: form.bank }))
-      if (saveSettingsGroup.rejected.match(result)) {
+      const office = { ...form.office, holidays: cleanHolidays(form.office.holidays) }
+      /**
+       * The working hours are not decoration on this tab: every attendance
+       * row is measured against them — a check-in after `start` is late, a
+       * day short of the window is partial — and the holidays decide which
+       * days count as owed at all. They used to live in Redux and vanish on
+       * reload, so the admin could set the shift and the figures would carry
+       * on using 08:00 to 23:00.
+       */
+      const [result, officeSaved] = await Promise.all([
+        dispatch(saveSettingsGroup({ group: 'bank', patch: form.bank })),
+        dispatch(saveSettingsGroup({ group: 'office', patch: office })),
+      ])
+      if (saveSettingsGroup.rejected.match(result) || saveSettingsGroup.rejected.match(officeSaved)) {
         setSaving(false)
-        return setNotice({ tone: 'danger', message: result.payload?.message ?? 'Could not save the bank details.' })
+        return setNotice({
+          tone: 'danger',
+          message: result.payload?.message ?? officeSaved.payload?.message ?? 'Could not save the company details.',
+        })
       }
-      dispatch(companySaved({ ...form, office: { ...form.office, holidays: cleanHolidays(form.office.holidays) } }))
+      dispatch(companySaved({ ...form, office }))
     } else {
       // These are not a preference the panel keeps to itself — the API reads
       // them on every check-in. "Require a photo" switched on here is what

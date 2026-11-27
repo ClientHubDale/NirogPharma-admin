@@ -115,6 +115,8 @@ const settingsSlice = createSlice({
         // among them. These decide what the API accepts, so the screen has to
         // show what the server actually holds rather than its own defaults.
         if (payload.mobileApp) state.mobileApp = { ...state.mobileApp, ...payload.mobileApp }
+        // The working window every attendance figure is measured against.
+        if (payload.office) state.office = { ...state.office, ...payload.office }
       })
       .addCase(fetchSettings.rejected, (state, { payload }) => {
         state.status = 'failed'
