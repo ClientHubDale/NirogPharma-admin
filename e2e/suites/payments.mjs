@@ -145,9 +145,17 @@ ok('a payment can be recorded', Boolean(cheque?.id), JSON.stringify(cheque).slic
 eq('…and it starts out waiting for approval', cheque?.status, 'PENDING')
 eq('…worth what it settles', cheque?.amount, Number(past.total))
 
+/**
+ * Measured as a change, not as a total.
+ *
+ * This firm is the client's own, and the office may already have payments
+ * sitting on it waiting to be approved — a figure that moves with their real
+ * work and has nothing to do with this suite. What the suite is entitled to
+ * assert is what *it* added, so `started.awaiting` is the line it counts from.
+ */
 const pending = await account()
 eq('a pending payment moves nothing', pending.outstanding, afterBill.outstanding)
-eq('…but it is shown as waiting on the office', pending.awaiting, Number(past.total))
+eq('…but it is shown as waiting on the office', pending.awaiting - started.awaiting, Number(past.total))
 
 // A second payment must not be able to settle the same bill over again.
 const twice = await api('/payments', {
@@ -166,7 +174,7 @@ eq('money already spoken for cannot be settled twice', twice?.code, 'OVER_ALLOCA
 await api(`/payments/${cheque.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'APPROVED' }) })
 const approved = await account()
 eq('approving takes it off what they owe', approved.outstanding, started.outstanding)
-eq('…and it stops being money we are waiting on', approved.awaiting, 0)
+eq('…and it stops being money we are waiting on', approved.awaiting - started.awaiting, 0)
 eq('…and counts as received', approved.received - started.received, Number(past.total))
 
 // An approved payment is a fact. Changing it means undoing it first.
@@ -185,7 +193,7 @@ await api(`/payments/${cheque.id}/status`, { method: 'PATCH', body: JSON.stringi
 const bounced = await account()
 eq('rejecting it puts the money back on what they owe', bounced.outstanding, afterBill.outstanding)
 eq('…and it is not counted as received any more', bounced.received, started.received)
-eq('…nor as waiting', bounced.awaiting, 0)
+eq('…nor as waiting', bounced.awaiting - started.awaiting, 0)
 
 const freed = ((await api(`/payments/dues?distributorId=${firm.id}`)).data?.bills ?? []).find(
   (row) => row.invoiceNo === OLD_BILL,
