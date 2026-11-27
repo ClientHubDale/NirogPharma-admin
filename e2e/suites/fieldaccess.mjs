@@ -153,6 +153,56 @@ ok(
   stock.map((r) => r.distributorName).join(', '),
 )
 
+/* ── money is scoped too, not just the firm list ─────────────────────── */
+
+/**
+ * Payments and outstanding narrowed for a distributor login and nobody else,
+ * so an executive could read every payment and every firm's dues across the
+ * business — their colleagues' figures included. Counting rows is not enough
+ * to catch that: it only shows when something exists that should be hidden.
+ */
+const theirBill = await api('/invoices', {
+  method: 'POST',
+  body: JSON.stringify({
+    invoiceNo: `${MARK}/B1`,
+    distributorId: firmB.id,
+    invoiceDate: '2026-10-01',
+    pastBill: true,
+    lines: [{ itemId: ((await api('/items?limit=10')).data?.items ?? [])[0]?.id, quantity: 1 }],
+  }),
+})
+if (theirBill.status === 201) {
+  await api(`/invoices/${theirBill.data.invoice.id}/issue`, { method: 'POST' })
+
+  const dues = (await asExecA('/payments/outstanding')).data?.rows ?? []
+  ok('an executive cannot see another’s firm in Outstanding', !dues.some((r) => r.distributorId === firmB.id), dues.map((r) => r.distributorName).join(', '))
+
+  const theirPayment = await api('/payments', {
+    method: 'POST',
+    body: JSON.stringify({ distributorId: firmB.id, otherPayment: 500, method: 'CASH', at: '2026-10-02', comment: `${MARK} on account` }),
+  })
+  if (theirPayment.success) {
+    const seen = (await asExecA('/payments?limit=200')).data?.payments ?? []
+    ok('…nor another’s payment', !seen.some((p) => p.id === theirPayment.data.payment.id), `${seen.length} payments visible`)
+    await api(`/payments/${theirPayment.data.payment.id}`, { method: 'DELETE' })
+  }
+
+  // An order on somebody else's firm must not reach them either. Counting
+  // rows would not show this — every order so far sits on their own firm.
+  const theirOrder = await api('/orders', {
+    method: 'POST',
+    body: JSON.stringify({ distributorId: firmB.id, shopName: `${MARK} Other Shop`, lines: [{ itemId: ((await api('/items?limit=10')).data?.items ?? [])[0]?.id, quantity: 1 }] }),
+  })
+  if (theirOrder.status === 201) {
+    const orders = (await asExecA('/orders?limit=200')).data?.orders ?? []
+    ok('…nor another’s order', !orders.some((o) => o.id === theirOrder.data.order.id), `${orders.length} orders visible`)
+    await api(`/orders/${theirOrder.data.order.id}`, { method: 'DELETE' })
+  }
+
+  await api(`/invoices/${theirBill.data.invoice.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) })
+  await api(`/invoices/${theirBill.data.invoice.id}`, { method: 'DELETE' })
+}
+
 /* ── and what stayed shut ────────────────────────────────────────────── */
 
 eq('an executive still cannot edit a firm', (await asExecA(`/distributors/${firmA.id}`, { method: 'PATCH', body: JSON.stringify({ name: 'nope' }) })).status, 403)
